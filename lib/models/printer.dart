@@ -1,3 +1,4 @@
+import 'package:pos_printers/enums/paper_size.dart';
 import 'package:pos_printers/pos_printers.pigeon.dart';
 
 class POSPrinter {
@@ -48,8 +49,8 @@ class POSPrinter {
     }
   }
 
-  Future<bool> printHTML(String html, int width) async {
-    final result = await POSPrintersApi().printHTML(html, width);
+  Future<bool> printHTML(String html, PaperSize paperSize) async {
+    final result = await POSPrintersApi().printHTML(html, paperSize.value);
     return result;
   }
 
