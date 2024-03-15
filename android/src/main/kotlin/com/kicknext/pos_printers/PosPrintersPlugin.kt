@@ -81,7 +81,8 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 }
 
                 PosPrinterConnectionType.NETWORK -> {
-                    currentConnection = POSConnect.connectMac(printer.macAddress, connectListener)
+                    currentConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
+                    currentConnection!!.connect(printer.ipAddress, connectListener)
                 }
             }
             callback(Result.success(ConnectResult(true)))

@@ -41,14 +41,7 @@ class POSPrinter {
   }
 
   Future<void> connectPrinter() async {
-    final result = await POSPrintersApi().connectPrinter(toDTO());
-    if (result.success) {
-      isConnecting = true;
-      return;
-    } else {
-      isConnecting = false;
-      status = result.message ?? 'Unknown status';
-    }
+    await POSPrintersApi().connectPrinter(toDTO());
   }
 
   Future<bool> printHTML(String html, PaperSize paperSize) async {
