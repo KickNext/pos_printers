@@ -10,7 +10,7 @@ class POSPrinter {
   final bool? dhcp;
   final String status;
   final bool isConnecting;
-  final bool needReboot;
+  bool needReboot;
 
   POSPrinter(
       {required this.connectionType,
@@ -37,6 +37,25 @@ class POSPrinter {
       isConnecting: false,
       needReboot: false,
     );
+  }
+
+  Future<void> connectPrinter() async {
+    final result = await POSPrintersApi().connectPrinter(toDTO());
+    if (result.success) {
+      return;
+    } else {
+      throw Exception(result.message);
+    }
+  }
+
+  Future<bool> printHTML(String html, int width) async {
+    final result = await POSPrintersApi().printHTML(html, width);
+    return result;
+  }
+
+  Future<bool> openCashBox() async {
+    final result = await POSPrintersApi().openCashBox(toDTO());
+    return result.isNotEmpty;
   }
 
   POSPrinter copyWith({

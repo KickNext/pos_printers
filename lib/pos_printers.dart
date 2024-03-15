@@ -20,18 +20,6 @@ class PosPrintersManager implements POSPrintersReceiverApi {
     yield* _printerStreamController!.stream;
   }
 
-  Future<void> connectPrinter(XPrinterDTO printerDTO) async {
-    final result = await POSPrintersApi().connectPrinter(printerDTO);
-    if (result.success) {
-      printer = POSPrinter.fromDTO(printerDTO).copyWith(isConnecting: true);
-    }
-  }
-
-  Future<bool> printHTML(String html, int width) async {
-    final result = await POSPrintersApi().printHTML(html, width);
-    return result;
-  }
-
   @override
   void newPrinter(XPrinterDTO printer) {
     _printerStreamController?.add(printer);
