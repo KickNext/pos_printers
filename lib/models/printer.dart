@@ -9,8 +9,8 @@ class POSPrinter {
   final String? mask;
   final String? gateway;
   final bool? dhcp;
-  final String status;
-  final bool isConnecting;
+  String status;
+  bool isConnecting;
   bool needReboot;
 
   POSPrinter(
@@ -43,9 +43,11 @@ class POSPrinter {
   Future<void> connectPrinter() async {
     final result = await POSPrintersApi().connectPrinter(toDTO());
     if (result.success) {
+      isConnecting = true;
       return;
     } else {
-      throw Exception(result.message);
+      isConnecting = false;
+      status = result.message ?? 'Unknown status';
     }
   }
 
