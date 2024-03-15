@@ -13,7 +13,7 @@ extension XPrinterDTOExt on XPrinterDTO {
     };
   }
 
-  XPrinterDTO fromJson(Map<String, dynamic> json) {
+  static XPrinterDTO fromJson(Map<String, dynamic> json) {
     return XPrinterDTO(
       connectionType: PosPrinterConnectionType.values.firstWhere((e) => e.name == json['connectionType']),
       usbPath: json['usbPath'],
