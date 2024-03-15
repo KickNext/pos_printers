@@ -157,6 +157,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         val curPrinter = POSPrinter(currentConnection)
         curPrinter.initializePrinter()
             .printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt()).cutHalfAndFeed(1)
+        callback(Result.success(true))
     }
 
     override fun setNetSettingsToPrinter(
