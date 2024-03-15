@@ -245,7 +245,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
-    private fun sendStatus(message: String, callback: ((Result<Unit>) -> Unit)? = null) {
+    private fun sendStatus(status: ConnectResult, callback: ((Result<Unit>) -> Unit)? = null) {
         val defaultCallback: (Result<Unit>) -> Unit = { result ->
             result.onSuccess {
                 Log.d("POSPrinters", "Сообщение успешно отправлено")
@@ -254,7 +254,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             }
         }
         val effectiveCallback = callback ?: defaultCallback
-//        receiver.newInfo(message, effectiveCallback)
+        receiver.connectionHandler(status, effectiveCallback)
     }
 
 
@@ -263,37 +263,37 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             POSConnect.CONNECT_SUCCESS -> {
                 println(connInfo)
                 println(msg)
-                sendStatus("Connect success")
+                sendStatus(ConnectResult(true, msg))
             }
 
             POSConnect.CONNECT_FAIL -> {
                 println(connInfo)
                 println(msg)
-                sendStatus("Connect fail")
+                sendStatus(ConnectResult(false, msg))
             }
 
             POSConnect.CONNECT_INTERRUPT -> {
                 println(connInfo)
                 println(msg)
-                sendStatus("Connection has disconnected")
+                sendStatus(ConnectResult(false, msg))
             }
 
             POSConnect.SEND_FAIL -> {
                 println(connInfo)
                 println(msg)
-                sendStatus("Send failed")
+                sendStatus(ConnectResult(false, msg))
             }
 
             POSConnect.USB_DETACHED -> {
                 println(connInfo)
                 println(msg)
-                sendStatus("Usb detached")
+                sendStatus(ConnectResult(false, msg))
             }
 
             POSConnect.USB_ATTACHED -> {
                 println(connInfo)
                 println(msg)
-                sendStatus("Usb_attached")
+                sendStatus(ConnectResult(true, msg))
             }
         }
     }

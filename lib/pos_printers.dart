@@ -10,6 +10,7 @@ class PosPrintersManager implements POSPrintersReceiverApi {
 
   POSPrinter? printer;
   StreamController<XPrinterDTO>? _printerStreamController;
+  StreamController<ConnectResult> printerStatusStreamController = StreamController<ConnectResult>();
 
   Stream<XPrinterDTO> findPrinters() async* {
     _printerStreamController = StreamController<XPrinterDTO>();
@@ -26,5 +27,7 @@ class PosPrintersManager implements POSPrintersReceiverApi {
   }
 
   @override
-  void connectionHandler(ConnectResult message) {}
+  void connectionHandler(ConnectResult message) {
+    printerStatusStreamController.add(message);
+  }
 }
