@@ -141,6 +141,16 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
+    override fun printData(data: ByteArray, width: Long, callback: (Result<Boolean>) -> Unit) {
+        try {
+            val curPrinter = POSPrinter(currentConnection)
+            curPrinter.initializePrinter().sendData(data)
+            callback(Result.success(true))
+        }  catch (platformError: Throwable) {
+            callback(Result.failure(platformError))
+        }
+    }
+
     override fun openCashBox(printer: XPrinterDTO, callback: (Result<String>) -> Unit) {
         try {
             val curPrinter = POSPrinter(currentConnection)

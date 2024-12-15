@@ -12,6 +12,8 @@ dependencies:
   pos_printers:
     path: ../
 
+  flutter_esc_pos_utils: ^1.0.1    
+
 dev_dependencies:
   integration_test:
     sdk: flutter

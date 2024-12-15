@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:pos_printers/enums/paper_size.dart';
 import 'package:pos_printers/pos_printers.pigeon.dart';
 
@@ -12,6 +14,9 @@ class POSPrinter {
   String status;
   bool isConnecting;
   bool needReboot;
+  bool get isAndrobar => _isAndrobar;
+  bool _isAndrobar = false;
+  set setAndrobar(bool value) => _isAndrobar = value;
 
   POSPrinter(
       {required this.connectionType,
@@ -46,6 +51,11 @@ class POSPrinter {
 
   Future<bool> printHTML(String html, PaperSize paperSize) async {
     final result = await POSPrintersApi().printHTML(html, paperSize.value);
+    return result;
+  }
+
+  Future<bool> printData(Uint8List data, PaperSize paperSize) async {
+    final result = await POSPrintersApi().printData(data, paperSize.value);
     return result;
   }
 

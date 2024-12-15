@@ -5,7 +5,7 @@ import 'models/printer.dart';
 
 class PosPrintersManager implements POSPrintersReceiverApi {
   PosPrintersManager() {
-    POSPrintersReceiverApi.setup(this);
+    POSPrintersReceiverApi.setUp(this);
   }
 
   POSPrinter? printer;

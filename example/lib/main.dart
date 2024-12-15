@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_esc_pos_utils/flutter_esc_pos_utils.dart';
 import 'package:pos_printers/pos_printers.dart';
 import 'package:pos_printers/pos_printers.pigeon.dart';
 import 'package:pos_printers_example/test_html.dart';
@@ -33,6 +35,7 @@ class _MyAppState extends State<MyApp> {
       _isSearching = true;
     });
     _printers.clear();
+    _printers.add(XPrinterDTO(connectionType: PosPrinterConnectionType.network, ipAddress: '192.168.2.148'));
     await for (var printer in _posPrintersManager.findPrinters()) {
       _printers.add(printer);
       setState(() {});
@@ -53,7 +56,52 @@ class _MyAppState extends State<MyApp> {
   Future<void> _testPrint() async {
     if (connectedPrinter != null) {
       await POSPrintersApi().printHTML("test", 576);
+      final data = await _getTestData();
+      await POSPrintersApi().printData(data, 576);
     }
+  }
+
+  Future<Uint8List> _getTestData() async {
+    List<int> bytes = [];
+    final profile = await CapabilityProfile.load();
+    final generator = Generator(PaperSize.mm80, profile);
+    bytes += List.generate(
+            10,
+            (index) => getRow(
+                (index + 1).toString(), 'Test ${index + 1}', '\$${(10 * (index + 1)).toStringAsFixed(2)}', generator),
+            growable: false)
+        .fold([], (previousValue, element) => previousValue + element);
+    bytes += generator.feed(2);
+    bytes += generator.cut();
+    return Uint8List.fromList(bytes);
+  }
+
+  List<int> getRow(String l, String c, String r, Generator generator) {
+    List<int> bytes = [];
+    bytes += generator.row([
+      PosColumn(
+        text: l,
+        width: 3,
+        styles: const PosStyles(
+          align: PosAlign.left,
+        ),
+      ),
+      PosColumn(
+        text: c,
+        width: 6,
+        styles: const PosStyles(
+          align: PosAlign.left,
+        ),
+      ),
+      PosColumn(
+        text: r,
+        width: 3,
+        styles: const PosStyles(
+          align: PosAlign.right,
+        ),
+      ),
+    ]);
+    return bytes;
   }
 
   Future<void> _updatePrinterSettings(XPrinterDTO printer) async {

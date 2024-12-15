@@ -86,6 +86,10 @@ abstract class POSPrintersApi {
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  bool printData(Uint8List data, int width);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   bool setNetSettingsToPrinter(XPrinterDTO printer, NetSettingsDTO netSettings);
 }
 
