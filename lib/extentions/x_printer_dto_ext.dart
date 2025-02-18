@@ -1,6 +1,6 @@
 import 'package:pos_printers/pos_printers.pigeon.dart';
 
-extension XPrinterDTOExt on XPrinterDTO {
+extension PrinterConnectionParamsExt on PrinterConnectionParams {
   Map<String, dynamic> toJson() {
     return {
       'connectionType': connectionType.name,
@@ -13,8 +13,8 @@ extension XPrinterDTOExt on XPrinterDTO {
     };
   }
 
-  static XPrinterDTO fromJson(Map<String, dynamic> json) {
-    return XPrinterDTO(
+  static PrinterConnectionParams fromJson(Map<String, dynamic> json) {
+    return PrinterConnectionParams(
       connectionType: PosPrinterConnectionType.values.firstWhere((e) => e.name == json['connectionType']),
       usbPath: json['usbPath'],
       macAddress: json['macAddress'],

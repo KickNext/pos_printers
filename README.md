@@ -2,6 +2,8 @@
 
 A new Flutter plugin project.
 
+// flutter pub run pigeon --input pigeons/pos_printers.dart
+
 ## Getting Started
 
 This project is a starting point for a Flutter

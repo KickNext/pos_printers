@@ -1,19 +1,16 @@
 import 'dart:async';
 import 'package:pos_printers/pos_printers.pigeon.dart';
 
-import 'models/printer.dart';
-
 class PosPrintersManager implements POSPrintersReceiverApi {
   PosPrintersManager() {
     POSPrintersReceiverApi.setUp(this);
   }
 
-  POSPrinter? printer;
-  StreamController<XPrinterDTO>? _printerStreamController;
+  StreamController<PrinterConnectionParams>? _printerStreamController;
   StreamController<ConnectResult> printerStatusStreamController = StreamController<ConnectResult>();
 
-  Stream<XPrinterDTO> findPrinters() async* {
-    _printerStreamController = StreamController<XPrinterDTO>();
+  Stream<PrinterConnectionParams> findPrinters() async* {
+    _printerStreamController = StreamController<PrinterConnectionParams>();
     POSPrintersApi().getPrinters().then((_) {
       _printerStreamController!.close();
       _printerStreamController = null;
@@ -22,7 +19,7 @@ class PosPrintersManager implements POSPrintersReceiverApi {
   }
 
   @override
-  void newPrinter(XPrinterDTO printer) {
+  void newPrinter(PrinterConnectionParams printer) {
     _printerStreamController?.add(printer);
   }
 
