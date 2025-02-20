@@ -82,6 +82,10 @@ abstract class POSPrintersApi {
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  bool disconnectPrinter(PrinterConnectionParams printer);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   String getPrinterStatus(PrinterConnectionParams printer);
 
   @async

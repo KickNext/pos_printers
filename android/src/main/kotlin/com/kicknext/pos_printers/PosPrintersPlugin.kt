@@ -40,6 +40,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         try {
             val usbPaths = POSConnect.getUsbDevices(context)
             for (path in usbPaths) {
+
                 returnPrinterDTO(
                     PrinterConnectionParams(
                         connectionType = PosPrinterConnectionType.USB,
@@ -87,15 +88,32 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 PosPrinterConnectionType.USB -> POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
                 PosPrinterConnectionType.NETWORK -> POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
             }
-            connectionsMap[key] = newConnection
-
             val info = when (printer.connectionType) {
                 PosPrinterConnectionType.USB -> printer.usbPath
                 PosPrinterConnectionType.NETWORK -> printer.ipAddress
             }
-
             newConnection.connect(info, connectListener)
+            connectionsMap[key] = newConnection
             callback(Result.success(ConnectResult(true)))
+        } catch (platformError: Throwable) {
+            callback(Result.failure(platformError))
+        }
+    }
+
+    override fun disconnectPrinter(
+        printer: PrinterConnectionParams,
+        callback: (Result<Boolean>) -> Unit
+    ) {
+        try {
+            val key = getConnectionKey(printer)
+            val connection = connectionsMap[key]
+            if (connection != null) {
+                connection.close()
+                connectionsMap.remove(key)
+                callback(Result.success(true))
+            } else {
+                callback(Result.failure(Throwable("No active connection for key=$key")))
+            }
         } catch (platformError: Throwable) {
             callback(Result.failure(platformError))
         }

@@ -226,6 +226,7 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
 interface POSPrintersApi {
   fun getPrinters(callback: (Result<Boolean>) -> Unit)
   fun connectPrinter(printer: PrinterConnectionParams, callback: (Result<ConnectResult>) -> Unit)
+  fun disconnectPrinter(printer: PrinterConnectionParams, callback: (Result<Boolean>) -> Unit)
   fun getPrinterStatus(printer: PrinterConnectionParams, callback: (Result<String>) -> Unit)
   fun getPrinterSN(printer: PrinterConnectionParams, callback: (Result<String>) -> Unit)
   fun openCashBox(printer: PrinterConnectionParams, callback: (Result<String>) -> Unit)
@@ -287,6 +288,27 @@ interface POSPrintersApi {
             val args = message as List<Any?>
             val printerArg = args[0] as PrinterConnectionParams
             api.connectPrinter(printerArg) { result: Result<ConnectResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.disconnectPrinter$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParams
+            api.disconnectPrinter(printerArg) { result: Result<Boolean> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
