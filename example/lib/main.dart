@@ -717,14 +717,18 @@ class _MyAppState extends State<MyApp> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _buildLanguageSelector(item, true),
-                          if (item.params.connectionType ==
-                                  PosPrinterConnectionType.usb &&
-                              usbDetails.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Text(usbDetails,
-                                  style: Theme.of(context).textTheme.bodySmall),
-                            ),
+                          if (item.params.connectionType == PosPrinterConnectionType.usb) ...[
+                             if (item.params.usbPath != null)
+                               Padding(
+                                 padding: const EdgeInsets.only(top: 4.0),
+                                 child: Text('Path: ${item.params.usbPath}', style: Theme.of(context).textTheme.bodySmall),
+                               ),
+                             if (usbDetails.isNotEmpty)
+                               Padding(
+                                 padding: const EdgeInsets.only(top: 2.0), // Adjust spacing
+                                 child: Text(usbDetails, style: Theme.of(context).textTheme.bodySmall),
+                               ),
+                          ]
                         ],
                       ),
                       leading: Icon(
@@ -799,18 +803,19 @@ class _MyAppState extends State<MyApp> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildLanguageSelector(
-                                    item, false), // Виджет выбора языка
-                                if (item.params.connectionType ==
-                                        PosPrinterConnectionType.usb &&
-                                    usbDetails.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4.0),
-                                    child: Text(usbDetails,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall),
-                                  ),
+                                _buildLanguageSelector(item, false), // Виджет выбора языка
+                                if (item.params.connectionType == PosPrinterConnectionType.usb) ...[
+                                  if (item.params.usbPath != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Text('Path: ${item.params.usbPath}', style: Theme.of(context).textTheme.bodySmall),
+                                    ),
+                                  if (usbDetails.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2.0), // Adjust spacing
+                                      child: Text(usbDetails, style: Theme.of(context).textTheme.bodySmall),
+                                    ),
+                                ]
                               ],
                             ),
                             leading: Icon(
