@@ -21,7 +21,7 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PosPrinterConnectionType) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is PrinterLanguage) {
+    }    else if (value is LabelPrinterLanguage) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
     }    else if (value is PrinterConnectionParams) {
@@ -32,6 +32,21 @@ class _PigeonCodec extends StandardMessageCodec {
       writeValue(buffer, value.encode());
     }    else if (value is ConnectResult) {
       buffer.putUint8(133);
+      writeValue(buffer, value.encode());
+    }    else if (value is PrinterDetailsDTO) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
+    }    else if (value is OperationResult) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.encode());
+    }    else if (value is StatusResult) {
+      buffer.putUint8(136);
+      writeValue(buffer, value.encode());
+    }    else if (value is StringResult) {
+      buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is ScanInitiationResult) {
+      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -46,13 +61,23 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : PosPrinterConnectionType.values[value];
       case 130: 
         final int? value = readValue(buffer) as int?;
-        return value == null ? null : PrinterLanguage.values[value];
+        return value == null ? null : LabelPrinterLanguage.values[value];
       case 131: 
         return PrinterConnectionParams.decode(readValue(buffer)!);
       case 132: 
         return NetSettingsDTO.decode(readValue(buffer)!);
       case 133: 
         return ConnectResult.decode(readValue(buffer)!);
+      case 134: 
+        return PrinterDetailsDTO.decode(readValue(buffer)!);
+      case 135: 
+        return OperationResult.decode(readValue(buffer)!);
+      case 136: 
+        return StatusResult.decode(readValue(buffer)!);
+      case 137: 
+        return StringResult.decode(readValue(buffer)!);
+      case 138: 
+        return ScanInitiationResult.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }

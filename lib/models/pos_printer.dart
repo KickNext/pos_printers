@@ -38,18 +38,20 @@ class POSPrinter {
 
   /// Печать HTML (рендерим на нативной стороне).
   Future<bool> printHTML(String html, PaperSize paperSize) async {
-    return await POSPrintersApi().printHTML(params, html, paperSize.value);
+    final result = await POSPrintersApi().printHTML(params, html, paperSize.value);
+    return result.success; // Return the boolean success status
   }
 
   /// Печать сырых ESC/POS команд.
   Future<bool> printData(Uint8List data, PaperSize paperSize) async {
-    return await POSPrintersApi().printData(params, data, paperSize.value);
+    final result = await POSPrintersApi().printData(params, data, paperSize.value);
+    return result.success; // Return the boolean success status
   }
 
   /// Открыть денежный ящик.
   Future<bool> openCashBox() async {
     final result = await POSPrintersApi().openCashBox(params);
-    return result.isNotEmpty;
+    return result.success; // Check the success field of OperationResult
   }
 
   /// Обновление сетевых настроек.
