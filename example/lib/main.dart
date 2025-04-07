@@ -559,6 +559,69 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  /// Enables DHCP for a network printer
+  Future<void> _enableDhcp(PrinterItem item) async {
+    // Ensure it's a network printer
+    if (item.params.connectionType != PosPrinterConnectionType.network) {
+      debugPrint('DHCP setting only applicable for network printers.');
+       if (mounted) {
+         _scaffoldMessengerKey.currentState?.showSnackBar(
+           const SnackBar(
+               content: Text('DHCP setting only for network printers.'),
+               backgroundColor: Colors.orange),
+         );
+       }
+      return;
+    }
+
+    // Show loading indicator? (Optional)
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Attempting to enable DHCP...')),
+    );
+
+    try {
+      // Construct NetSettingsDTO - use placeholders for IP/Mask/Gateway when enabling DHCP
+      final netSettings = NetSettingsDTO(
+        ipAddress: '', // Placeholder, likely ignored by native code when dhcp is true
+        mask: '',      // Placeholder
+        gateway: '',   // Placeholder
+        dhcp: true,           // Enable DHCP
+      );
+
+      final result = await _posPrintersManager.setNetSettings(item.params, netSettings);
+      debugPrint('setNetSettings (DHCP) success=${result.success}, error=${result.errorMessage}');
+
+      if (mounted) {
+        if (result.success) {
+          _scaffoldMessengerKey.currentState?.showSnackBar(
+            const SnackBar(
+                content: Text('DHCP enabled successfully! Printer may restart or require re-scan.'),
+                backgroundColor: Colors.green),
+          );
+          // Optional: Consider automatically disconnecting or prompting user to re-scan
+        } else {
+          _scaffoldMessengerKey.currentState?.showSnackBar(
+            SnackBar(
+                content: Text('Failed to enable DHCP: ${result.errorMessage ?? "Unknown reason"}'),
+                backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error enabling DHCP: $e');
+      if (mounted) {
+        _scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+              content: Text('Error enabling DHCP: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      // Hide loading indicator? (Optional)
+    }
+  }
+
+
   /// Строит виджет для выбора языка принтера
   Widget _buildLanguageSelector(PrinterItem item, bool isConnectedList) {
     return PopupMenuButton<LabelPrinterLanguage?>(
@@ -741,6 +804,13 @@ class _MyAppState extends State<MyApp> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Add DHCP button only for network printers
+                          if (item.params.connectionType != PosPrinterConnectionType.network)
+                            IconButton(
+                              icon: const Icon(Icons.settings_ethernet), // Or Icons.network_check
+                              tooltip: 'Enable DHCP',
+                              onPressed: () => _enableDhcp(item),
+                            ),
                           IconButton(
                             icon: const Icon(Icons.info_outline),
                             tooltip: 'Get Status',
