@@ -29,7 +29,7 @@ class PrinterItem {
     bool? upsideDown,
   }) {
     // Инициализация параметров подключения на основе обнаруженного принтера
-    if (discoveredPrinter.type == 'usb') {
+    if (discoveredPrinter.type == PosPrinterConnectionType.usb) {
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.usb,
         vendorId: discoveredPrinter.vendorId,
@@ -39,13 +39,9 @@ class PrinterItem {
         usbSerialNumber: discoveredPrinter.usbSerialNumber,
       );
     } else {
-      // Предполагаем, что сетевой принтер
-      final ipParts = discoveredPrinter.id.split(':');
-      final ip = ipParts.isNotEmpty ? ipParts[0] : '';
-
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.network,
-        ipAddress: ip,
+        ipAddress: discoveredPrinter.ipAddress,
         macAddress: discoveredPrinter.macAddress,
       );
     }
