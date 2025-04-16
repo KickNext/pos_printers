@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart' show ReadBuffer, WriteBuffer;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:pos_printers/pos_printers.pigeon.dart';
+import 'package:pos_printers/src/pos_printers.pigeon.dart';
 
 
 class _PigeonCodec extends StandardMessageCodec {
@@ -36,17 +36,14 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PrinterDetailsDTO) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is OperationResult) {
+    }    else if (value is StatusResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is StatusResult) {
+    }    else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is StringResult) {
+    }    else if (value is DiscoveredPrinter) {
       buffer.putUint8(137);
-      writeValue(buffer, value.encode());
-    }    else if (value is ScanInitiationResult) {
-      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -71,13 +68,11 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134: 
         return PrinterDetailsDTO.decode(readValue(buffer)!);
       case 135: 
-        return OperationResult.decode(readValue(buffer)!);
-      case 136: 
         return StatusResult.decode(readValue(buffer)!);
-      case 137: 
+      case 136: 
         return StringResult.decode(readValue(buffer)!);
-      case 138: 
-        return ScanInitiationResult.decode(readValue(buffer)!);
+      case 137: 
+        return DiscoveredPrinter.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }

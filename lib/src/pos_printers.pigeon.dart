@@ -37,31 +37,35 @@ enum LabelPrinterLanguage {
   zpl,
 }
 
-/// DTO c настройками подключения (USB, Network, etc.)
-/// Без поля PrinterLanguage.
+/// DTO c параметрами для *подключения* к принтеру.
+/// Используется для connect, print, disconnect и других операций.
+/// НЕ используется для обнаружения (для этого есть DiscoveredPrinter).
 class PrinterConnectionParams {
   PrinterConnectionParams({
     required this.connectionType,
-    this.usbPath,
-    this.macAddress,
+    this.vendorId,
+    this.productId,
+    this.usbSerialNumber,
     this.ipAddress,
+    this.macAddress,
     this.mask,
     this.gateway,
     this.dhcp,
-    this.vendorId,
-    this.productId,
     this.manufacturer,
     this.productName,
-    this.usbSerialNumber,
   });
 
   PosPrinterConnectionType connectionType;
 
-  String? usbPath;
+  int? vendorId;
 
-  String? macAddress;
+  int? productId;
+
+  String? usbSerialNumber;
 
   String? ipAddress;
+
+  String? macAddress;
 
   String? mask;
 
@@ -69,30 +73,23 @@ class PrinterConnectionParams {
 
   bool? dhcp;
 
-  int? vendorId;
-
-  int? productId;
-
   String? manufacturer;
 
   String? productName;
 
-  String? usbSerialNumber;
-
   Object encode() {
     return <Object?>[
       connectionType,
-      usbPath,
-      macAddress,
+      vendorId,
+      productId,
+      usbSerialNumber,
       ipAddress,
+      macAddress,
       mask,
       gateway,
       dhcp,
-      vendorId,
-      productId,
       manufacturer,
       productName,
-      usbSerialNumber,
     ];
   }
 
@@ -100,17 +97,16 @@ class PrinterConnectionParams {
     result as List<Object?>;
     return PrinterConnectionParams(
       connectionType: result[0]! as PosPrinterConnectionType,
-      usbPath: result[1] as String?,
-      macAddress: result[2] as String?,
-      ipAddress: result[3] as String?,
-      mask: result[4] as String?,
-      gateway: result[5] as String?,
-      dhcp: result[6] as bool?,
-      vendorId: result[7] as int?,
-      productId: result[8] as int?,
+      vendorId: result[1] as int?,
+      productId: result[2] as int?,
+      usbSerialNumber: result[3] as String?,
+      ipAddress: result[4] as String?,
+      macAddress: result[5] as String?,
+      mask: result[6] as String?,
+      gateway: result[7] as String?,
+      dhcp: result[8] as bool?,
       manufacturer: result[9] as String?,
       productName: result[10] as String?,
-      usbSerialNumber: result[11] as String?,
     );
   }
 }
@@ -214,33 +210,6 @@ class PrinterDetailsDTO {
   }
 }
 
-/// Generic result for operations that succeed or fail with an optional message.
-class OperationResult {
-  OperationResult({
-    required this.success,
-    this.errorMessage,
-  });
-
-  bool success;
-
-  String? errorMessage;
-
-  Object encode() {
-    return <Object?>[
-      success,
-      errorMessage,
-    ];
-  }
-
-  static OperationResult decode(Object result) {
-    result as List<Object?>;
-    return OperationResult(
-      success: result[0]! as bool,
-      errorMessage: result[1] as String?,
-    );
-  }
-}
-
 /// Result for getting printer status.
 class StatusResult {
   StatusResult({
@@ -305,31 +274,75 @@ class StringResult {
   }
 }
 
-/// Result for the initial printer discovery call.
-/// Note: Individual printers are still sent via `newPrinter` callback.
-/// This result indicates if the scan *started* successfully.
-class ScanInitiationResult {
-  ScanInitiationResult({
-    required this.success,
-    this.errorMessage,
+/// DTO для найденного принтера (USB или Сеть) - результат поиска `findPrinters`.
+/// Содержит информацию, достаточную для отображения пользователю и
+/// для создания `PrinterConnectionParams` для последующего подключения.
+class DiscoveredPrinter {
+  DiscoveredPrinter({
+    required this.id,
+    required this.type,
+    required this.label,
+    this.vendorId,
+    this.productId,
+    this.usbSerialNumber,
+    this.ipAddress,
+    this.macAddress,
+    this.manufacturer,
+    this.productName,
   });
 
-  bool success;
+  /// Уникальный идентификатор *найденного* устройства в данный момент.
+  /// Для USB: это временный `deviceName` (например, /dev/bus/usb/001/002). Не стабилен!
+  /// Для Network: это `ip` (например, 192.168.1.100). Стабилен, если IP не меняется.
+  String id;
 
-  String? errorMessage;
+  PosPrinterConnectionType type;
+
+  /// Человекочитаемое имя/метка принтера.
+  String label;
+
+  int? vendorId;
+
+  int? productId;
+
+  String? usbSerialNumber;
+
+  String? ipAddress;
+
+  String? macAddress;
+
+  String? manufacturer;
+
+  String? productName;
 
   Object encode() {
     return <Object?>[
-      success,
-      errorMessage,
+      id,
+      type,
+      label,
+      vendorId,
+      productId,
+      usbSerialNumber,
+      ipAddress,
+      macAddress,
+      manufacturer,
+      productName,
     ];
   }
 
-  static ScanInitiationResult decode(Object result) {
+  static DiscoveredPrinter decode(Object result) {
     result as List<Object?>;
-    return ScanInitiationResult(
-      success: result[0]! as bool,
-      errorMessage: result[1] as String?,
+    return DiscoveredPrinter(
+      id: result[0]! as String,
+      type: result[1]! as PosPrinterConnectionType,
+      label: result[2]! as String,
+      vendorId: result[3] as int?,
+      productId: result[4] as int?,
+      usbSerialNumber: result[5] as String?,
+      ipAddress: result[6] as String?,
+      macAddress: result[7] as String?,
+      manufacturer: result[8] as String?,
+      productName: result[9] as String?,
     );
   }
 }
@@ -360,17 +373,14 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PrinterDetailsDTO) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is OperationResult) {
+    }    else if (value is StatusResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is StatusResult) {
+    }    else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is StringResult) {
+    }    else if (value is DiscoveredPrinter) {
       buffer.putUint8(137);
-      writeValue(buffer, value.encode());
-    }    else if (value is ScanInitiationResult) {
-      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -395,13 +405,11 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134: 
         return PrinterDetailsDTO.decode(readValue(buffer)!);
       case 135: 
-        return OperationResult.decode(readValue(buffer)!);
-      case 136: 
         return StatusResult.decode(readValue(buffer)!);
-      case 137: 
+      case 136: 
         return StringResult.decode(readValue(buffer)!);
-      case 138: 
-        return ScanInitiationResult.decode(readValue(buffer)!);
+      case 137: 
+        return DiscoveredPrinter.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -421,8 +429,21 @@ class POSPrintersApi {
 
   final String pigeonVar_messageChannelSuffix;
 
-  Future<ScanInitiationResult> getPrinters() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinters$pigeonVar_messageChannelSuffix';
+  /// Инициирует асинхронный поиск принтеров (USB, SDK Net, TCP Net).
+  /// Найденные принтеры (`DiscoveredPrinter`) будут отправляться через `PrinterDiscoveryEventsApi.onPrinterFound`.
+  /// По завершении поиска будет вызван `PrinterDiscoveryEventsApi.onDiscoveryComplete`.
+  ///
+  /// Жизненный цикл:
+  /// 1. Вызвать `findPrinters()`.
+  /// 2. Получать `DiscoveredPrinter` через `onPrinterFound`.
+  /// 3. Пользователь выбирает принтер из списка найденных.
+  /// 4. Создать `PrinterConnectionParams`, используя *стабильные* идентификаторы из `DiscoveredPrinter`
+  ///    (VID/PID/Serial для USB; IP для Network).
+  /// 5. Вызвать `connectPrinter()` с созданными параметрами.
+  /// 6. Выполнять операции (печать и т.д.).
+  /// 7. Вызвать `disconnectPrinter()`.
+  Future<void> findPrinters() async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.findPrinters$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -438,16 +459,17 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as ScanInitiationResult?)!;
+      return;
     }
   }
 
+  /// Подключается к принтеру, используя параметры из `printer`.
+  /// Для USB: необходимы `vendorId`, `productId`. `usbSerialNumber` желателен.
+  /// Для Network: необходим `ipAddress`.
+  /// Возвращает `ConnectResult` с успехом/ошибкой подключения.
+  /// При успешном подключении плагин сохраняет соединение для последующих операций.
+  /// Если для этих параметров уже есть активное соединение, оно будет разорвано перед новым подключением.
   Future<ConnectResult> connectPrinter(PrinterConnectionParams printer) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.connectPrinter$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -475,7 +497,10 @@ class POSPrintersApi {
     }
   }
 
-  Future<OperationResult> disconnectPrinter(PrinterConnectionParams printer) async {
+  /// Отключает принтер, идентифицированный параметрами `printer`.
+  /// Используйте те же параметры (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`),
+  /// которые использовались для `connectPrinter`.
+  Future<void> disconnectPrinter(PrinterConnectionParams printer) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.disconnectPrinter$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -492,13 +517,8 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
@@ -556,7 +576,7 @@ class POSPrintersApi {
     }
   }
 
-  Future<OperationResult> openCashBox(PrinterConnectionParams printer) async {
+  Future<void> openCashBox(PrinterConnectionParams printer) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.openCashBox$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -573,18 +593,13 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
   /// Печать HTML для обычных чековых ESC/POS принтеров.
-  Future<OperationResult> printHTML(PrinterConnectionParams printer, String html, int width) async {
+  Future<void> printHTML(PrinterConnectionParams printer, String html, int width, bool upsideDown) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printHTML$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -592,7 +607,7 @@ class POSPrintersApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, html, width]) as List<Object?>?;
+        await pigeonVar_channel.send(<Object?>[printer, html, width, upsideDown]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -601,18 +616,13 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
   /// Печать сырых ESC/POS команд.
-  Future<OperationResult> printData(PrinterConnectionParams printer, Uint8List data, int width) async {
+  Future<void> printData(PrinterConnectionParams printer, Uint8List data, int width, bool upsideDown) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printData$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -620,7 +630,7 @@ class POSPrintersApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, data, width]) as List<Object?>?;
+        await pigeonVar_channel.send(<Object?>[printer, data, width, upsideDown]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -629,18 +639,13 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
-  /// Настройка сетевых параметров
-  Future<OperationResult> setNetSettingsToPrinter(PrinterConnectionParams printer, NetSettingsDTO netSettings) async {
+  /// Настройка сетевых параметров через существующее соединение
+  Future<void> setNetSettingsToPrinter(PrinterConnectionParams printer, NetSettingsDTO netSettings) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.setNetSettingsToPrinter$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -657,19 +662,36 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
+    } else {
+      return;
+    }
+  }
+
+  /// Настройка сетевых параметров через UDP broadcast (требуется MAC-адрес)
+  Future<void> configureNetViaUDP(String macAddress, NetSettingsDTO netSettings) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.configureNetViaUDP$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[macAddress, netSettings]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
       throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
       );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
   /// Печать "сырых" команд (CPCL/TSPL/ZPL), если нужно.
-  /// [language] - указываем, какой именно формат (cpcl, tspl, zpl, ...)
-  Future<OperationResult> printLabelData(PrinterConnectionParams printer, LabelPrinterLanguage language, Uint8List labelCommands, int width) async {
+  Future<void> printLabelData(PrinterConnectionParams printer, LabelPrinterLanguage language, Uint8List labelCommands, int width) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printLabelData$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -686,19 +708,13 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
   /// Печать HTML на лейбл-принтер (рендерим HTML -> bitmap),
-  /// [language] - тип команды (cpcl, tspl, zpl) для отправки.
-  Future<OperationResult> printLabelHTML(PrinterConnectionParams printer, LabelPrinterLanguage language, String html, int width, int height) async {
+  Future<void> printLabelHTML(PrinterConnectionParams printer, LabelPrinterLanguage language, String html, int width, int height) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printLabelHTML$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -715,19 +731,13 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
   /// Установка базовых параметров (размер этикетки, скорость, плотность)
-  /// [language] - cpcl, tspl, zpl
-  Future<OperationResult> setupLabelParams(PrinterConnectionParams printer, LabelPrinterLanguage language, int labelWidth, int labelHeight, int densityOrDarkness, int speed) async {
+  Future<void> setupLabelParams(PrinterConnectionParams printer, LabelPrinterLanguage language, int labelWidth, int labelHeight, int densityOrDarkness, int speed) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.setupLabelParams$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -744,13 +754,8 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as OperationResult?)!;
+      return;
     }
   }
 
@@ -783,34 +788,39 @@ class POSPrintersApi {
   }
 }
 
-abstract class POSPrintersReceiverApi {
+/// API для получения событий обнаружения принтеров из нативного кода во Flutter.
+abstract class PrinterDiscoveryEventsApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
-  void newPrinter(PrinterConnectionParams message);
+  /// Вызывается при обнаружении нового (уникального) принтера.
+  /// `printer` содержит информацию о найденном принтере. Используйте стабильные
+  /// идентификаторы из него (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`)
+  /// для создания `PrinterConnectionParams` при вызове `connectPrinter`.
+  void onPrinterFound(DiscoveredPrinter printer);
 
-  void connectionHandler(ConnectResult message);
+  /// Вызывается по завершении всего процесса поиска.
+  /// `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).
+  /// `errorMessage` содержит сообщение об ошибке, если `success` = false.
+  void onDiscoveryComplete(bool success, String? errorMessage);
 
-  /// Called by native code when the printer scan process is complete.
-  void scanCompleted(bool success, String? errorMessage);
-
-  static void setUp(POSPrintersReceiverApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
+  static void setUp(PrinterDiscoveryEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.newPrinter$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.newPrinter was null.');
+          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final PrinterConnectionParams? arg_message = (args[0] as PrinterConnectionParams?);
-          assert(arg_message != null,
-              'Argument for dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.newPrinter was null, expected non-null PrinterConnectionParams.');
+          final DiscoveredPrinter? arg_printer = (args[0] as DiscoveredPrinter?);
+          assert(arg_printer != null,
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null, expected non-null DiscoveredPrinter.');
           try {
-            api.newPrinter(arg_message!);
+            api.onPrinterFound(arg_printer!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
@@ -822,46 +832,21 @@ abstract class POSPrintersReceiverApi {
     }
     {
       final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.connectionHandler$messageChannelSuffix', pigeonChannelCodec,
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete$messageChannelSuffix', pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.connectionHandler was null.');
-          final List<Object?> args = (message as List<Object?>?)!;
-          final ConnectResult? arg_message = (args[0] as ConnectResult?);
-          assert(arg_message != null,
-              'Argument for dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.connectionHandler was null, expected non-null ConnectResult.');
-          try {
-            api.connectionHandler(arg_message!);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
-          }
-        });
-      }
-    }
-    {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.scanCompleted$messageChannelSuffix', pigeonChannelCodec,
-          binaryMessenger: binaryMessenger);
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.scanCompleted was null.');
+          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final bool? arg_success = (args[0] as bool?);
           assert(arg_success != null,
-              'Argument for dev.flutter.pigeon.pos_printers.POSPrintersReceiverApi.scanCompleted was null, expected non-null bool.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete was null, expected non-null bool.');
           final String? arg_errorMessage = (args[1] as String?);
           try {
-            api.scanCompleted(arg_success!, arg_errorMessage);
+            api.onDiscoveryComplete(arg_success!, arg_errorMessage);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

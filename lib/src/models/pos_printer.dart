@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
-import 'package:pos_printers/enums/paper_size.dart';
-import 'package:pos_printers/pos_printers.pigeon.dart';
+import 'package:pos_printers/src/enums/paper_size.dart';
+import 'package:pos_printers/src/pos_printers.pigeon.dart';
 
 /// Класс для чековых принтеров (ESC/POS).
 class POSPrinter {
@@ -37,21 +37,20 @@ class POSPrinter {
   }
 
   /// Печать HTML (рендерим на нативной стороне).
-  Future<bool> printHTML(String html, PaperSize paperSize) async {
-    final result = await POSPrintersApi().printHTML(params, html, paperSize.value);
-    return result.success; // Return the boolean success status
+  Future<void> printHTML(String html, PaperSize paperSize,
+      {bool upsideDown = false}) async {
+    await POSPrintersApi().printHTML(params, html, paperSize.value, upsideDown);
   }
 
   /// Печать сырых ESC/POS команд.
-  Future<bool> printData(Uint8List data, PaperSize paperSize) async {
-    final result = await POSPrintersApi().printData(params, data, paperSize.value);
-    return result.success; // Return the boolean success status
+  Future<void> printData(Uint8List data, PaperSize paperSize,
+      {bool upsideDown = false}) async {
+    await POSPrintersApi().printData(params, data, paperSize.value, upsideDown);
   }
 
   /// Открыть денежный ящик.
-  Future<bool> openCashBox() async {
-    final result = await POSPrintersApi().openCashBox(params);
-    return result.success; // Check the success field of OperationResult
+  Future<void> openCashBox() async {
+    await POSPrintersApi().openCashBox(params);
   }
 
   /// Обновление сетевых настроек.
