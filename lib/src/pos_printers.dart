@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:async';
 import 'package:flutter/services.dart'; // Required for PlatformException
 import 'package:pos_printers/src/pos_printers.pigeon.dart';
@@ -7,6 +8,8 @@ import 'package:pos_printers/src/pos_printers.pigeon.dart';
 /// Provides methods for discovering, connecting, disconnecting, printing,
 /// and managing printers. Discovery results are provided via a stream.
 class PosPrintersManager implements PrinterDiscoveryEventsApi {
+  static const String _logTag = 'PosPrintersManager';
+
   // Implement the FlutterApi
   /// Internal instance of the Pigeon-generated API.
   final POSPrintersApi _api = POSPrintersApi();
@@ -23,13 +26,16 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     try {
       return await apiCall();
     } on PlatformException catch (e) {
-      print("PlatformException in operation '$apiOperation': ${e.message}");
+      developer.log(
+          "PlatformException in operation '$apiOperation': ${e.message}",
+          name: _logTag);
       if (defaultErrorResult != null) {
         return defaultErrorResult;
       }
       throw Exception('$apiOperation failed: ${e.message}');
     } catch (e) {
-      print("Unexpected error in operation '$apiOperation': $e");
+      developer.log("Unexpected error in operation '$apiOperation': $e",
+          name: _logTag);
       if (defaultErrorResult != null) {
         return defaultErrorResult;
       }
@@ -70,8 +76,9 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     if (!(_printerDiscoveryController?.isClosed ?? true)) {
       _printerDiscoveryController!.add(printer);
     } else {
-      print(
-          "Warning: onPrinterFound called but discovery stream is closed or null.");
+      developer.log(
+          "Warning: onPrinterFound called but discovery stream is closed or null.",
+          name: _logTag);
     }
   }
 
@@ -119,7 +126,8 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
 
     // Close previous controller just in case (should be null if completed properly)
     _printerDiscoveryController?.close();
-    _printerDiscoveryController = StreamController<DiscoveredPrinter>();
+    _printerDiscoveryController =
+        StreamController<DiscoveredPrinter>.broadcast();
     _discoveryCompleter = Completer<void>();
 
     try {
@@ -140,7 +148,8 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
       return _printerDiscoveryController!.stream;
     } catch (e) {
       // This section will handle errors that could occur before _executeApiCall
-      print("Unexpected error during discovery initiation: $e");
+      developer.log("Unexpected error during discovery initiation: $e",
+          name: _logTag);
       _printerDiscoveryController?.addError(e);
       _printerDiscoveryController?.close();
       _discoveryCompleter?.completeError(e);

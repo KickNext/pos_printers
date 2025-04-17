@@ -33,7 +33,7 @@ class PrinterListTile extends StatelessWidget {
 
   /// Создаёт виджет [PrinterListTile] для отображения информации о принтере.
   const PrinterListTile({
-    Key? key,
+    super.key,
     required this.item,
     required this.isConnected,
     required this.onConnect,
@@ -43,11 +43,12 @@ class PrinterListTile extends StatelessWidget {
     required this.onSetNetworkSettings,
     required this.onConfigureUdp,
     required this.onLanguageSelected,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
-    final bool isNetwork = item.discoveredPrinter.type == 'network';
+    final bool isNetwork =
+        item.discoveredPrinter.type == PosPrinterConnectionType.network;
     final bool hasMAC = item.discoveredPrinter.macAddress?.isNotEmpty ?? false;
 
     return Card(

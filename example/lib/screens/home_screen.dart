@@ -267,8 +267,9 @@ class _HomeScreenState extends State<HomeScreen> {
       {required PrinterItem item, required bool isUdp}) async {
     // Pre-fill with current printer IP if connected and setting via connection
     String? initialIp;
-    if (!isUdp && item.discoveredPrinter.type == PosPrinterConnectionType.network) {
-      initialIp = item.connectionParams.ipAddress;
+    if (!isUdp &&
+        item.discoveredPrinter.type == PosPrinterConnectionType.network) {
+      initialIp = item.connectionParams.networkParams?.ipAddress;
     }
 
     // Create default settings with pre-filled data

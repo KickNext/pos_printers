@@ -32,17 +32,21 @@ class PrinterItem {
     if (discoveredPrinter.type == PosPrinterConnectionType.usb) {
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.usb,
-        vendorId: discoveredPrinter.vendorId,
-        productId: discoveredPrinter.productId,
-        manufacturer: discoveredPrinter.manufacturer,
-        productName: discoveredPrinter.productName,
-        usbSerialNumber: discoveredPrinter.usbSerialNumber,
+        usbParams: UsbParams(
+          vendorId: discoveredPrinter.vendorId!,
+          productId: discoveredPrinter.productId!,
+          usbSerialNumber: discoveredPrinter.usbSerialNumber,
+          manufacturer: discoveredPrinter.manufacturer,
+          productName: discoveredPrinter.productName,
+        ),
       );
     } else {
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.network,
-        ipAddress: discoveredPrinter.ipAddress,
-        macAddress: discoveredPrinter.macAddress,
+        networkParams: NetworkParams(
+          ipAddress: discoveredPrinter.ipAddress!,
+          macAddress: discoveredPrinter.macAddress,
+        ),
       );
     }
 

@@ -151,7 +151,7 @@ class PrinterService {
   /// Sets network settings via active connection
   Future<void> setNetSettingsViaConnection(
       PrinterItem item, NetSettingsDTO settings) async {
-    if (item.discoveredPrinter.type != 'network') {
+    if (item.discoveredPrinter.type != PosPrinterConnectionType.network) {
       throw Exception('Эта функция только для сетевых принтеров');
     }
     await _posPrintersManager.setNetSettings(item.connectionParams, settings);

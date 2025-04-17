@@ -23,43 +23,48 @@ enum LabelPrinterLanguage {
   zpl,
 }
 
-/// DTO c параметрами для *подключения* к принтеру.
-/// Используется для connect, print, disconnect и других операций.
-/// НЕ используется для обнаружения (для этого есть DiscoveredPrinter).
+
 class PrinterConnectionParams {
   final PosPrinterConnectionType connectionType;
-
-  // --- Поля для идентификации и подключения ---
-  // Для USB: vendorId и productId обязательны. usbSerialNumber опционален, но желателен для уникальности.
-  final int? vendorId;
-  final int? productId;
-  final String? usbSerialNumber; // Может быть получен при обнаружении
-
-  // Для Network: ipAddress обязателен.
-  final String? ipAddress;
-
-  // --- Информационные поля (обычно получаются при обнаружении) ---
-  // Эти поля НЕ используются для установки соединения, но могут быть полезны
-  // для отображения или логирования.
-  final String? macAddress; // Может быть получен из SDK поиска (Network)
-  final String? mask; // Может быть получен из SDK поиска (Network)
-  final String? gateway; // Может быть получен из SDK поиска (Network)
-  final bool? dhcp; // Может быть получен из SDK поиска (Network)
-  final String? manufacturer; // Может быть получен при обнаружении (USB)
-  final String? productName; // Может быть получен при обнаружении (USB)
+  final UsbParams? usbParams;
+  final NetworkParams? networkParams;
 
   PrinterConnectionParams({
     required this.connectionType,
-    this.vendorId,
-    this.productId,
+    this.usbParams,
+    this.networkParams,
+  });
+}
+
+class UsbParams {
+  final int vendorId;
+  final int productId;
+  final String? usbSerialNumber;
+  final String? manufacturer; // Может быть получен при обнаружении (USB)
+  final String? productName; // Может быть получен при обнаружении (USB)
+
+  UsbParams({
+    required this.vendorId,
+    required this.productId,
     this.usbSerialNumber,
-    this.ipAddress,
-    this.macAddress,
-    this.mask,
-    this.gateway,
-    this.dhcp,
     this.manufacturer,
     this.productName,
+  });
+}
+
+class NetworkParams {
+  final String ipAddress;
+  final String? mask;
+  final String? gateway;
+  final String? macAddress;
+  final bool? dhcp;
+
+  NetworkParams({
+    required this.ipAddress,
+    this.mask,
+    this.gateway,
+    this.macAddress,
+    this.dhcp,
   });
 }
 

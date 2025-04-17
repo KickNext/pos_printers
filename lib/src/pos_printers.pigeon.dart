@@ -43,53 +43,21 @@ enum LabelPrinterLanguage {
 class PrinterConnectionParams {
   PrinterConnectionParams({
     required this.connectionType,
-    this.vendorId,
-    this.productId,
-    this.usbSerialNumber,
-    this.ipAddress,
-    this.macAddress,
-    this.mask,
-    this.gateway,
-    this.dhcp,
-    this.manufacturer,
-    this.productName,
+    this.usbParams,
+    this.networkParams,
   });
 
   PosPrinterConnectionType connectionType;
 
-  int? vendorId;
+  UsbParams? usbParams;
 
-  int? productId;
-
-  String? usbSerialNumber;
-
-  String? ipAddress;
-
-  String? macAddress;
-
-  String? mask;
-
-  String? gateway;
-
-  bool? dhcp;
-
-  String? manufacturer;
-
-  String? productName;
+  NetworkParams? networkParams;
 
   Object encode() {
     return <Object?>[
       connectionType,
-      vendorId,
-      productId,
-      usbSerialNumber,
-      ipAddress,
-      macAddress,
-      mask,
-      gateway,
-      dhcp,
-      manufacturer,
-      productName,
+      usbParams,
+      networkParams,
     ];
   }
 
@@ -97,16 +65,90 @@ class PrinterConnectionParams {
     result as List<Object?>;
     return PrinterConnectionParams(
       connectionType: result[0]! as PosPrinterConnectionType,
-      vendorId: result[1] as int?,
-      productId: result[2] as int?,
-      usbSerialNumber: result[3] as String?,
-      ipAddress: result[4] as String?,
-      macAddress: result[5] as String?,
-      mask: result[6] as String?,
-      gateway: result[7] as String?,
-      dhcp: result[8] as bool?,
-      manufacturer: result[9] as String?,
-      productName: result[10] as String?,
+      usbParams: result[1] as UsbParams?,
+      networkParams: result[2] as NetworkParams?,
+    );
+  }
+}
+
+class UsbParams {
+  UsbParams({
+    required this.vendorId,
+    required this.productId,
+    this.usbSerialNumber,
+    this.manufacturer,
+    this.productName,
+  });
+
+  int vendorId;
+
+  int productId;
+
+  String? usbSerialNumber;
+
+  String? manufacturer;
+
+  String? productName;
+
+  Object encode() {
+    return <Object?>[
+      vendorId,
+      productId,
+      usbSerialNumber,
+      manufacturer,
+      productName,
+    ];
+  }
+
+  static UsbParams decode(Object result) {
+    result as List<Object?>;
+    return UsbParams(
+      vendorId: result[0]! as int,
+      productId: result[1]! as int,
+      usbSerialNumber: result[2] as String?,
+      manufacturer: result[3] as String?,
+      productName: result[4] as String?,
+    );
+  }
+}
+
+class NetworkParams {
+  NetworkParams({
+    required this.ipAddress,
+    this.mask,
+    this.gateway,
+    this.macAddress,
+    this.dhcp,
+  });
+
+  String ipAddress;
+
+  String? mask;
+
+  String? gateway;
+
+  String? macAddress;
+
+  bool? dhcp;
+
+  Object encode() {
+    return <Object?>[
+      ipAddress,
+      mask,
+      gateway,
+      macAddress,
+      dhcp,
+    ];
+  }
+
+  static NetworkParams decode(Object result) {
+    result as List<Object?>;
+    return NetworkParams(
+      ipAddress: result[0]! as String,
+      mask: result[1] as String?,
+      gateway: result[2] as String?,
+      macAddress: result[3] as String?,
+      dhcp: result[4] as bool?,
     );
   }
 }
@@ -364,23 +406,29 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PrinterConnectionParams) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    }    else if (value is NetSettingsDTO) {
+    }    else if (value is UsbParams) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is ConnectResult) {
+    }    else if (value is NetworkParams) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is PrinterDetailsDTO) {
+    }    else if (value is NetSettingsDTO) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is StatusResult) {
+    }    else if (value is ConnectResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is StringResult) {
+    }    else if (value is PrinterDetailsDTO) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is DiscoveredPrinter) {
+    }    else if (value is StatusResult) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is StringResult) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    }    else if (value is DiscoveredPrinter) {
+      buffer.putUint8(139);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -399,16 +447,20 @@ class _PigeonCodec extends StandardMessageCodec {
       case 131: 
         return PrinterConnectionParams.decode(readValue(buffer)!);
       case 132: 
-        return NetSettingsDTO.decode(readValue(buffer)!);
+        return UsbParams.decode(readValue(buffer)!);
       case 133: 
-        return ConnectResult.decode(readValue(buffer)!);
+        return NetworkParams.decode(readValue(buffer)!);
       case 134: 
-        return PrinterDetailsDTO.decode(readValue(buffer)!);
+        return NetSettingsDTO.decode(readValue(buffer)!);
       case 135: 
-        return StatusResult.decode(readValue(buffer)!);
+        return ConnectResult.decode(readValue(buffer)!);
       case 136: 
-        return StringResult.decode(readValue(buffer)!);
+        return PrinterDetailsDTO.decode(readValue(buffer)!);
       case 137: 
+        return StatusResult.decode(readValue(buffer)!);
+      case 138: 
+        return StringResult.decode(readValue(buffer)!);
+      case 139: 
         return DiscoveredPrinter.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);

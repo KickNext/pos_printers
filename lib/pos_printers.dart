@@ -1,7 +1,5 @@
 // Auto-generated exports
 
 export 'src/enums/paper_size.dart';
-export 'src/extentions/x_printer_dto_ext.dart';
-export 'src/models/pos_printer.dart';
 export 'src/pos_printers.dart';
 export 'src/pos_printers.pigeon.dart';

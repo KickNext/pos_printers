@@ -8,9 +8,9 @@ class NetworkSettingsDialog extends StatefulWidget {
 
   /// Создаёт диалог для настройки сетевых параметров принтера
   const NetworkSettingsDialog({
-    Key? key,
+    super.key,
     required this.initialSettings,
-  }) : super(key: key);
+  });
 
   @override
   State<NetworkSettingsDialog> createState() => _NetworkSettingsDialogState();

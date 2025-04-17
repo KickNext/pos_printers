@@ -82,47 +82,83 @@ enum class LabelPrinterLanguage(val raw: Int) {
  */
 data class PrinterConnectionParams (
   val connectionType: PosPrinterConnectionType,
-  val vendorId: Long? = null,
-  val productId: Long? = null,
-  val usbSerialNumber: String? = null,
-  val ipAddress: String? = null,
-  val macAddress: String? = null,
-  val mask: String? = null,
-  val gateway: String? = null,
-  val dhcp: Boolean? = null,
-  val manufacturer: String? = null,
-  val productName: String? = null
+  val usbParams: UsbParams? = null,
+  val networkParams: NetworkParams? = null
 )
  {
   companion object {
     fun fromList(pigeonVar_list: List<Any?>): PrinterConnectionParams {
       val connectionType = pigeonVar_list[0] as PosPrinterConnectionType
-      val vendorId = pigeonVar_list[1] as Long?
-      val productId = pigeonVar_list[2] as Long?
-      val usbSerialNumber = pigeonVar_list[3] as String?
-      val ipAddress = pigeonVar_list[4] as String?
-      val macAddress = pigeonVar_list[5] as String?
-      val mask = pigeonVar_list[6] as String?
-      val gateway = pigeonVar_list[7] as String?
-      val dhcp = pigeonVar_list[8] as Boolean?
-      val manufacturer = pigeonVar_list[9] as String?
-      val productName = pigeonVar_list[10] as String?
-      return PrinterConnectionParams(connectionType, vendorId, productId, usbSerialNumber, ipAddress, macAddress, mask, gateway, dhcp, manufacturer, productName)
+      val usbParams = pigeonVar_list[1] as UsbParams?
+      val networkParams = pigeonVar_list[2] as NetworkParams?
+      return PrinterConnectionParams(connectionType, usbParams, networkParams)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
       connectionType,
+      usbParams,
+      networkParams,
+    )
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class UsbParams (
+  val vendorId: Long,
+  val productId: Long,
+  val usbSerialNumber: String? = null,
+  val manufacturer: String? = null,
+  val productName: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): UsbParams {
+      val vendorId = pigeonVar_list[0] as Long
+      val productId = pigeonVar_list[1] as Long
+      val usbSerialNumber = pigeonVar_list[2] as String?
+      val manufacturer = pigeonVar_list[3] as String?
+      val productName = pigeonVar_list[4] as String?
+      return UsbParams(vendorId, productId, usbSerialNumber, manufacturer, productName)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
       vendorId,
       productId,
       usbSerialNumber,
-      ipAddress,
-      macAddress,
-      mask,
-      gateway,
-      dhcp,
       manufacturer,
       productName,
+    )
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class NetworkParams (
+  val ipAddress: String,
+  val mask: String? = null,
+  val gateway: String? = null,
+  val macAddress: String? = null,
+  val dhcp: Boolean? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NetworkParams {
+      val ipAddress = pigeonVar_list[0] as String
+      val mask = pigeonVar_list[1] as String?
+      val gateway = pigeonVar_list[2] as String?
+      val macAddress = pigeonVar_list[3] as String?
+      val dhcp = pigeonVar_list[4] as Boolean?
+      return NetworkParams(ipAddress, mask, gateway, macAddress, dhcp)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      ipAddress,
+      mask,
+      gateway,
+      macAddress,
+      dhcp,
     )
   }
 }
@@ -338,30 +374,40 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NetSettingsDTO.fromList(it)
+          UsbParams.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ConnectResult.fromList(it)
+          NetworkParams.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PrinterDetailsDTO.fromList(it)
+          NetSettingsDTO.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          StatusResult.fromList(it)
+          ConnectResult.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          StringResult.fromList(it)
+          PrinterDetailsDTO.fromList(it)
         }
       }
       137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          StatusResult.fromList(it)
+        }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          StringResult.fromList(it)
+        }
+      }
+      139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           DiscoveredPrinter.fromList(it)
         }
@@ -383,28 +429,36 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         stream.write(131)
         writeValue(stream, value.toList())
       }
-      is NetSettingsDTO -> {
+      is UsbParams -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is ConnectResult -> {
+      is NetworkParams -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is PrinterDetailsDTO -> {
+      is NetSettingsDTO -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is StatusResult -> {
+      is ConnectResult -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is StringResult -> {
+      is PrinterDetailsDTO -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is DiscoveredPrinter -> {
+      is StatusResult -> {
         stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is StringResult -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is DiscoveredPrinter -> {
+        stream.write(139)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
