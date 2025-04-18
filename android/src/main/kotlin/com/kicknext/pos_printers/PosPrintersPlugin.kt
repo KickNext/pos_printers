@@ -662,11 +662,10 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     override fun printData(
         printer: PrinterConnectionParams,
         data: ByteArray,
-        width: Long, // Note: width is often unused for raw data, but kept for API consistency
-        upsideDown: Boolean,
+        width: Long,
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d("POSPrinters", "printData called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}, data size: ${data.size}, upsideDown: $upsideDown")
+        Log.d("POSPrinters", "printData called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}, data size: ${data.size}")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -676,22 +675,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 val curPrinter = POSPrinter(connection)
                 Log.d("POSPrinters", "Initializing printer for raw data...")
                 curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
-                
-
-                if (upsideDown) {
-                    Log.d("POSPrinters", "Setting upside down mode before printing...")
-                    curPrinter.setTurnUpsideDownMode(true)
-                }
 
                 Log.d("POSPrinters", "Sending raw data...")
                 curPrinter.sendData(data)
-
-                if (upsideDown) {
-                    Log.d("POSPrinters", "Resetting upside down mode after printing...")
-                    val resetBytes = byteArrayOf(0x1B, 0x7B, 0)
-                    curPrinter.sendData(resetBytes)
-                    curPrinter.setTurnUpsideDownMode(false)
-                }
                 
                 Log.d("POSPrinters", "Raw data sent (assuming success).")
                 // Return success immediately after sending, without waiting for status.
@@ -708,10 +694,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParams,
         html: String,
         width: Long,
-        upsideDown: Boolean,
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d("POSPrinters", "printHTML called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}, width: $width, upsideDown: $upsideDown")
+        Log.d("POSPrinters", "printHTML called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}, width: $width")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -732,20 +717,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 Log.d("POSPrinters", "Bitmap generated. Initializing printer for HTML print...")
                 curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
 
-                if (upsideDown) {
-                    Log.d("POSPrinters", "Setting upside down mode before printing HTML...")
-                    curPrinter.setTurnUpsideDownMode(true)
-                }
-
                 curPrinter.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
-
-                if (upsideDown) {
-                    Log.d("POSPrinters", "Resetting upside down mode after printing HTML...")
-                    val resetBytes = byteArrayOf(0x1B, 0x7B, 0)
-                    curPrinter.sendData(resetBytes)
-                    curPrinter.setTurnUpsideDownMode(false)
-                }
-                
 
                 curPrinter.cutHalfAndFeed(1)
                 

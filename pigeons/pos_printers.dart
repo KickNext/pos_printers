@@ -11,8 +11,6 @@ import 'package:pigeon/pigeon.dart';
     package: 'com.kicknext.pos_printers.gen',
   ),
 ))
-
-
 enum PosPrinterConnectionType {
   usb,
   network,
@@ -102,24 +100,24 @@ class NetSettingsDTO {
 class StatusResult {
   final bool success;
   final String? errorMessage;
-  final String? status; 
+  final String? status;
 
   StatusResult({required this.success, this.errorMessage, this.status});
 }
+
 class StringResult {
   final bool success;
   final String? errorMessage;
-  final String? value; 
+  final String? value;
 
   StringResult({required this.success, this.errorMessage, this.value});
 }
 
 class DiscoveredPrinterDTO {
   final String id;
-  final PosPrinterConnectionType type; 
+  final PosPrinterConnectionType type;
   final UsbParams? usbParams;
-  final NetworkParams?
-      networkParams; 
+  final NetworkParams? networkParams;
 
   DiscoveredPrinterDTO({
     required this.id,
@@ -171,14 +169,12 @@ abstract class POSPrintersApi {
   @TaskQueue(
       type: TaskQueueType
           .serialBackgroundThread) // Reverted: Concurrent not supported by Pigeon TaskQueueType
-  void printHTML(
-      PrinterConnectionParams printer, String html, int width, bool upsideDown);
+  void printHTML(PrinterConnectionParams printer, String html, int width);
 
   /// Печать сырых ESC/POS команд.
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
-  void printData(PrinterConnectionParams printer, Uint8List data, int width,
-      bool upsideDown);
+  void printData(PrinterConnectionParams printer, Uint8List data, int width);
 
   /// Настройка сетевых параметров через существующее соединение
   @async

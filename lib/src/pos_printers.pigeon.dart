@@ -524,7 +524,7 @@ class POSPrintersApi {
   }
 
   /// Печать HTML для обычных чековых ESC/POS принтеров.
-  Future<void> printHTML(PrinterConnectionParams printer, String html, int width, bool upsideDown) async {
+  Future<void> printHTML(PrinterConnectionParams printer, String html, int width) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printHTML$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -532,7 +532,7 @@ class POSPrintersApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, html, width, upsideDown]) as List<Object?>?;
+        await pigeonVar_channel.send(<Object?>[printer, html, width]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -547,7 +547,7 @@ class POSPrintersApi {
   }
 
   /// Печать сырых ESC/POS команд.
-  Future<void> printData(PrinterConnectionParams printer, Uint8List data, int width, bool upsideDown) async {
+  Future<void> printData(PrinterConnectionParams printer, Uint8List data, int width) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printData$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -555,7 +555,7 @@ class POSPrintersApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, data, width, upsideDown]) as List<Object?>?;
+        await pigeonVar_channel.send(<Object?>[printer, data, width]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {

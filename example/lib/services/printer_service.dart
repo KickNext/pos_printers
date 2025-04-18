@@ -57,7 +57,6 @@ class PrinterService {
       item.connectionParams,
       "<h1>ESC/POS Html</h1><p>Some text</p>",
       576, // 80mm width in dots (for 203 dpi)
-      upsideDown: item.isUpsideDown,
     );
   }
 
@@ -74,8 +73,7 @@ class PrinterService {
     bytes.add(0x0A); // LF
     bytes.addAll([0x1D, 0x56, 0x41, 0x10]); // Partial cut
     await _posPrintersManager.printReceiptData(
-        item.connectionParams, Uint8List.fromList(bytes), 576,
-        upsideDown: item.isUpsideDown);
+        item.connectionParams, Uint8List.fromList(bytes), 576);
   }
 
   /// Печать лейбла сырыми командами (CPCL/TSPL/ZPL)

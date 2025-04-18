@@ -382,9 +382,9 @@ interface POSPrintersApi {
   fun getPrinterSN(printer: PrinterConnectionParams, callback: (Result<StringResult>) -> Unit)
   fun openCashBox(printer: PrinterConnectionParams, callback: (Result<Unit>) -> Unit)
   /** Печать HTML для обычных чековых ESC/POS принтеров. */
-  fun printHTML(printer: PrinterConnectionParams, html: String, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
+  fun printHTML(printer: PrinterConnectionParams, html: String, width: Long, callback: (Result<Unit>) -> Unit)
   /** Печать сырых ESC/POS команд. */
-  fun printData(printer: PrinterConnectionParams, data: ByteArray, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
+  fun printData(printer: PrinterConnectionParams, data: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
   /** Настройка сетевых параметров через существующее соединение */
   fun setNetSettingsToPrinter(printer: PrinterConnectionParams, netSettings: NetSettingsDTO, callback: (Result<Unit>) -> Unit)
   /** Настройка сетевых параметров через UDP broadcast (требуется MAC-адрес) */
@@ -530,8 +530,7 @@ interface POSPrintersApi {
             val printerArg = args[0] as PrinterConnectionParams
             val htmlArg = args[1] as String
             val widthArg = args[2] as Long
-            val upsideDownArg = args[3] as Boolean
-            api.printHTML(printerArg, htmlArg, widthArg, upsideDownArg) { result: Result<Unit> ->
+            api.printHTML(printerArg, htmlArg, widthArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
@@ -553,8 +552,7 @@ interface POSPrintersApi {
             val printerArg = args[0] as PrinterConnectionParams
             val dataArg = args[1] as ByteArray
             val widthArg = args[2] as Long
-            val upsideDownArg = args[3] as Boolean
-            api.printData(printerArg, dataArg, widthArg, upsideDownArg) { result: Result<Unit> ->
+            api.printData(printerArg, dataArg, widthArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))

@@ -230,11 +230,10 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [width]: The printing width in dots.
   /// [upsideDown]: Whether to print the content upside down.
   Future<void> printReceiptHTML(
-      PrinterConnectionParams printer, String html, int width,
-      {bool upsideDown = false}) async {
+      PrinterConnectionParams printer, String html, int width) async {
     return _executeApiCall<void>(
       'Print HTML receipt',
-      () => _api.printHTML(printer, html, width, upsideDown),
+      () => _api.printHTML(printer, html, width),
     );
   }
 
@@ -245,11 +244,10 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [width]: The printing width in dots (may be relevant for some printers/commands).
   /// [upsideDown]: Whether to print the content upside down.
   Future<void> printReceiptData(
-      PrinterConnectionParams printer, Uint8List data, int width,
-      {bool upsideDown = false}) async {
+      PrinterConnectionParams printer, Uint8List data, int width) async {
     return _executeApiCall<void>(
       'Print receipt data',
-      () => _api.printData(printer, data, width, upsideDown),
+      () => _api.printData(printer, data, width),
     );
   }
 
