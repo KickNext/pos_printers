@@ -37,9 +37,6 @@ enum LabelPrinterLanguage {
   zpl,
 }
 
-/// DTO c параметрами для *подключения* к принтеру.
-/// Используется для connect, print, disconnect и других операций.
-/// НЕ используется для обнаружения (для этого есть DiscoveredPrinter).
 class PrinterConnectionParams {
   PrinterConnectionParams({
     required this.connectionType,
@@ -189,69 +186,7 @@ class NetSettingsDTO {
   }
 }
 
-class ConnectResult {
-  ConnectResult({
-    required this.success,
-    this.message,
-  });
-
-  bool success;
-
-  String? message;
-
-  Object encode() {
-    return <Object?>[
-      success,
-      message,
-    ];
-  }
-
-  static ConnectResult decode(Object result) {
-    result as List<Object?>;
-    return ConnectResult(
-      success: result[0]! as bool,
-      message: result[1] as String?,
-    );
-  }
-}
-
 /// DTO с расширенной информацией о принтере
-class PrinterDetailsDTO {
-  PrinterDetailsDTO({
-    this.serialNumber,
-    this.firmwareVersion,
-    this.deviceModel,
-    this.currentStatus,
-  });
-
-  String? serialNumber;
-
-  String? firmwareVersion;
-
-  String? deviceModel;
-
-  String? currentStatus;
-
-  Object encode() {
-    return <Object?>[
-      serialNumber,
-      firmwareVersion,
-      deviceModel,
-      currentStatus,
-    ];
-  }
-
-  static PrinterDetailsDTO decode(Object result) {
-    result as List<Object?>;
-    return PrinterDetailsDTO(
-      serialNumber: result[0] as String?,
-      firmwareVersion: result[1] as String?,
-      deviceModel: result[2] as String?,
-      currentStatus: result[3] as String?,
-    );
-  }
-}
-
 /// Result for getting printer status.
 class StatusResult {
   StatusResult({
@@ -284,7 +219,6 @@ class StatusResult {
   }
 }
 
-/// Result for getting printer serial number or other string values.
 class StringResult {
   StringResult({
     required this.success,
@@ -316,75 +250,38 @@ class StringResult {
   }
 }
 
-/// DTO для найденного принтера (USB или Сеть) - результат поиска `findPrinters`.
-/// Содержит информацию, достаточную для отображения пользователю и
-/// для создания `PrinterConnectionParams` для последующего подключения.
-class DiscoveredPrinter {
-  DiscoveredPrinter({
+class DiscoveredPrinterDTO {
+  DiscoveredPrinterDTO({
     required this.id,
     required this.type,
-    required this.label,
-    this.vendorId,
-    this.productId,
-    this.usbSerialNumber,
-    this.ipAddress,
-    this.macAddress,
-    this.manufacturer,
-    this.productName,
+    this.usbParams,
+    this.networkParams,
   });
 
-  /// Уникальный идентификатор *найденного* устройства в данный момент.
-  /// Для USB: это временный `deviceName` (например, /dev/bus/usb/001/002). Не стабилен!
-  /// Для Network: это `ip` (например, 192.168.1.100). Стабилен, если IP не меняется.
   String id;
 
   PosPrinterConnectionType type;
 
-  /// Человекочитаемое имя/метка принтера.
-  String label;
+  UsbParams? usbParams;
 
-  int? vendorId;
-
-  int? productId;
-
-  String? usbSerialNumber;
-
-  String? ipAddress;
-
-  String? macAddress;
-
-  String? manufacturer;
-
-  String? productName;
+  NetworkParams? networkParams;
 
   Object encode() {
     return <Object?>[
       id,
       type,
-      label,
-      vendorId,
-      productId,
-      usbSerialNumber,
-      ipAddress,
-      macAddress,
-      manufacturer,
-      productName,
+      usbParams,
+      networkParams,
     ];
   }
 
-  static DiscoveredPrinter decode(Object result) {
+  static DiscoveredPrinterDTO decode(Object result) {
     result as List<Object?>;
-    return DiscoveredPrinter(
+    return DiscoveredPrinterDTO(
       id: result[0]! as String,
       type: result[1]! as PosPrinterConnectionType,
-      label: result[2]! as String,
-      vendorId: result[3] as int?,
-      productId: result[4] as int?,
-      usbSerialNumber: result[5] as String?,
-      ipAddress: result[6] as String?,
-      macAddress: result[7] as String?,
-      manufacturer: result[8] as String?,
-      productName: result[9] as String?,
+      usbParams: result[2] as UsbParams?,
+      networkParams: result[3] as NetworkParams?,
     );
   }
 }
@@ -415,20 +312,14 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is NetSettingsDTO) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is ConnectResult) {
+    }    else if (value is StatusResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is PrinterDetailsDTO) {
+    }    else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is StatusResult) {
+    }    else if (value is DiscoveredPrinterDTO) {
       buffer.putUint8(137);
-      writeValue(buffer, value.encode());
-    }    else if (value is StringResult) {
-      buffer.putUint8(138);
-      writeValue(buffer, value.encode());
-    }    else if (value is DiscoveredPrinter) {
-      buffer.putUint8(139);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -453,15 +344,11 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134: 
         return NetSettingsDTO.decode(readValue(buffer)!);
       case 135: 
-        return ConnectResult.decode(readValue(buffer)!);
-      case 136: 
-        return PrinterDetailsDTO.decode(readValue(buffer)!);
-      case 137: 
         return StatusResult.decode(readValue(buffer)!);
-      case 138: 
+      case 136: 
         return StringResult.decode(readValue(buffer)!);
-      case 139: 
-        return DiscoveredPrinter.decode(readValue(buffer)!);
+      case 137: 
+        return DiscoveredPrinterDTO.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -516,13 +403,7 @@ class POSPrintersApi {
     }
   }
 
-  /// Подключается к принтеру, используя параметры из `printer`.
-  /// Для USB: необходимы `vendorId`, `productId`. `usbSerialNumber` желателен.
-  /// Для Network: необходим `ipAddress`.
-  /// Возвращает `ConnectResult` с успехом/ошибкой подключения.
-  /// При успешном подключении плагин сохраняет соединение для последующих операций.
-  /// Если для этих параметров уже есть активное соединение, оно будет разорвано перед новым подключением.
-  Future<ConnectResult> connectPrinter(PrinterConnectionParams printer) async {
+  Future<void> connectPrinter(PrinterConnectionParams printer) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.connectPrinter$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -539,19 +420,11 @@ class POSPrintersApi {
         message: pigeonVar_replyList[1] as String?,
         details: pigeonVar_replyList[2],
       );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
     } else {
-      return (pigeonVar_replyList[0] as ConnectResult?)!;
+      return;
     }
   }
 
-  /// Отключает принтер, идентифицированный параметрами `printer`.
-  /// Используйте те же параметры (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`),
-  /// которые использовались для `connectPrinter`.
   Future<void> disconnectPrinter(PrinterConnectionParams printer) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.disconnectPrinter$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -787,57 +660,6 @@ class POSPrintersApi {
       return;
     }
   }
-
-  /// Установка базовых параметров (размер этикетки, скорость, плотность)
-  Future<void> setupLabelParams(PrinterConnectionParams printer, LabelPrinterLanguage language, int labelWidth, int labelHeight, int densityOrDarkness, int speed) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.setupLabelParams$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, language, labelWidth, labelHeight, densityOrDarkness, speed]) as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else {
-      return;
-    }
-  }
-
-  /// Получение расширенной информации о принтере
-  Future<PrinterDetailsDTO> getPrinterDetails(PrinterConnectionParams printer) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterDetails$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer]) as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
-    } else {
-      return (pigeonVar_replyList[0] as PrinterDetailsDTO?)!;
-    }
-  }
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.
@@ -848,7 +670,7 @@ abstract class PrinterDiscoveryEventsApi {
   /// `printer` содержит информацию о найденном принтере. Используйте стабильные
   /// идентификаторы из него (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`)
   /// для создания `PrinterConnectionParams` при вызове `connectPrinter`.
-  void onPrinterFound(DiscoveredPrinter printer);
+  void onPrinterFound(DiscoveredPrinterDTO printer);
 
   /// Вызывается по завершении всего процесса поиска.
   /// `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).
@@ -868,9 +690,9 @@ abstract class PrinterDiscoveryEventsApi {
           assert(message != null,
           'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final DiscoveredPrinter? arg_printer = (args[0] as DiscoveredPrinter?);
+          final DiscoveredPrinterDTO? arg_printer = (args[0] as DiscoveredPrinterDTO?);
           assert(arg_printer != null,
-              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null, expected non-null DiscoveredPrinter.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null, expected non-null DiscoveredPrinterDTO.');
           try {
             api.onPrinterFound(arg_printer!);
             return wrapResponse(empty: true);

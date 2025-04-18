@@ -80,12 +80,12 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             var overallSuccess = true
             var firstError: Throwable? = null
 
-            suspend fun sendPrinterFound(printer: DiscoveredPrinter) {
+            suspend fun sendPrinterFound(printer: DiscoveredPrinterDTO) {
                 if (foundPrinterIds.add(printer.id)) {
                     withContext(Dispatchers.Main) {
                         try {
                             discoveryEventsApi.onPrinterFound(printer) {}
-                            Log.d("POSPrinters", "Sent printer to Dart: ${printer.id} (${printer.label})")
+                            Log.d("POSPrinters", "Sent printer to Dart: ${printer.id}")
                         } catch (e: Exception) {
                             Log.e("POSPrinters", "Error sending printer ${printer.id} to Dart: ${e.message}", e)
                         }
@@ -154,9 +154,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
-    private suspend fun discoverUsbPrinters(): List<DiscoveredPrinter> = withContext(networkDispatcher) {
+    private suspend fun discoverUsbPrinters(): List<DiscoveredPrinterDTO> = withContext(networkDispatcher) {
         Log.d("POSPrinters", "Starting USB device scan...")
-        val discovered = mutableListOf<DiscoveredPrinter>()
+        val discovered = mutableListOf<DiscoveredPrinterDTO>()
         try {
             val usbDevices = usbManager.deviceList
             Log.d("POSPrinters", "Found ${usbDevices.size} USB devices total.")
@@ -201,17 +201,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
                     // Add printer even if serial couldn't be read
                     discovered.add(
-                        DiscoveredPrinter(
-                            id = device.deviceName, // Use deviceName as unique ID for USB
-                            type = "usb",
-                            label = device.productName ?: device.manufacturerName ?: "USB Printer ${device.vendorId}:${device.productId}",
-                            isOnline = true, // Found = online
-                            vendorId = device.vendorId.toLong(),
-                            productId = device.productId.toLong(),
-                            manufacturer = device.manufacturerName,
-                            productName = device.productName,
-                            usbSerialNumber = usbSerial,
-                            macAddress = null // Not applicable for USB
+                        DiscoveredPrinterDTO(
+                            id = "${device.vendorId}:${device.productId}:${device.serialNumber}", // Use deviceName as unique ID for USB
+                            type = PosPrinterConnectionType.USB,
+                            usbParams = UsbParams(
+                                vendorId = device.vendorId.toLong(),
+                                productId = device.productId.toLong(),
+                                usbSerialNumber = usbSerial,
+                                manufacturer = device.manufacturerName,
+                                productName = device.productName,
+                                ),
+                            networkParams = null,
                         )
                     )
                 } else {
@@ -227,10 +227,10 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     }
 
     // Uses CompletableFuture to bridge callback-based SDK search with coroutines
-    private suspend fun discoverSdkNetworkPrinters(): Pair<List<DiscoveredPrinter>, List<String>> {
+    private suspend fun discoverSdkNetworkPrinters(): Pair<List<DiscoveredPrinterDTO>, List<String>> {
         Log.d("POSPrinters", "Starting SDK network device scan...")
-        val future = CompletableFuture<Pair<List<DiscoveredPrinter>, List<String>>>()
-        val discoveredPrinters = mutableListOf<DiscoveredPrinter>()
+        val future = CompletableFuture<Pair<List<DiscoveredPrinterDTO>, List<String>>>()
+        val discoveredPrinters = mutableListOf<DiscoveredPrinterDTO>()
         val foundIps = mutableSetOf<String>() // Use Set for efficient IP checking
 
         val searchTimeoutMillis = 5000L // 5 seconds timeout for SDK search
@@ -255,13 +255,19 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
                     // Add to list only if IP is new
                     if (foundIps.add(ip)) {
-                        val printer = DiscoveredPrinter(
+                        val printer = DiscoveredPrinterDTO(
                             id = ip,
-                            type = "network",
-                            label = "SDK: $ip (${netPrinter.macStr ?: "N/A"})",
-                            isOnline = true,
-                            vendorId = null, productId = null, manufacturer = null, productName = null, usbSerialNumber = null,
-                            macAddress = netPrinter.macStr // Store MAC address if found by SDK
+                            type = PosPrinterConnectionType.NETWORK,
+
+
+                            usbParams = null,
+                            networkParams = NetworkParams(
+                                ipAddress = ip,
+                                macAddress = netPrinter.macStr,
+                                dhcp = netPrinter.isDhcp,
+                                mask = netPrinter.maskStr,
+                                gateway = netPrinter.gatewayStr
+                                ,)
                         )
                         discoveredPrinters.add(printer)
                     }
@@ -309,9 +315,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
-    private suspend fun discoverTcpNetworkPrinters(excludeIps: List<String>): List<DiscoveredPrinter> = withContext(networkDispatcher) {
+    private suspend fun discoverTcpNetworkPrinters(excludeIps: List<String>): List<DiscoveredPrinterDTO> = withContext(networkDispatcher) {
         Log.d("POSPrinters", "Starting TCP network scan (port 9100), excluding ${excludeIps.size} IPs.")
-        val discovered = mutableListOf<DiscoveredPrinter>()
+        val discovered = mutableListOf<DiscoveredPrinterDTO>()
         val localNetworks = getLocalIpAddresses()
         val port = 9100
         val timeoutMs = 300 // Short timeout for TCP check
@@ -336,13 +342,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                                     Log.i("POSPrinters", "TCP Port $port open found at: $ip")
                                     synchronized(discovered) { // Protect list access from concurrent adds
                                         discovered.add(
-                                            DiscoveredPrinter(
+                                            DiscoveredPrinterDTO(
                                                 id = ip,
-                                                type = "network",
-                                                label = "Network TCP: $ip",
-                                                isOnline = true,
-                                                vendorId = null, productId = null, manufacturer = null, productName = null, usbSerialNumber = null,
-                                                macAddress = null // TCP scan doesn't provide MAC
+                                                type = PosPrinterConnectionType.NETWORK,
+                                                usbParams = null,
+                                                networkParams = NetworkParams(
+                                                    ipAddress = ip,
+                                                    mask = null,
+                                                    gateway = null,
+                                                    dhcp = false,
+                                                    macAddress = null
+                                                ),
                                             )
                                         )
                                     }
@@ -482,10 +492,10 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     private fun getConnectionKey(printer: PrinterConnectionParams): String {
         return when (printer.connectionType) {
             PosPrinterConnectionType.USB -> {
-                "usb:${printer.vendorId}:${printer.productId}:${printer.usbSerialNumber ?: "null"}"
+                "usb:${printer.usbParams!!.vendorId}:${printer.usbParams.productId}:${printer.usbParams.usbSerialNumber ?: "null"}"
             }
             PosPrinterConnectionType.NETWORK -> {
-                "net:${printer.ipAddress}"
+                "net:${printer.networkParams!!.ipAddress}"
             }
         }
     }
@@ -523,7 +533,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
-    override fun connectPrinter(printer: PrinterConnectionParams, callback: (Result<ConnectResult>) -> Unit) {
+    override fun connectPrinter(printer: PrinterConnectionParams, callback: (Result<Unit>) -> Unit) {
         Log.d("POSPrinters", "connectPrinter called for params: $printer")
         val key = getConnectionKey(printer)
         Log.d("POSPrinters", "Generated connection key: $key")
@@ -542,18 +552,18 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             when (printer.connectionType) {
                 PosPrinterConnectionType.USB -> {
 
-                    if (printer.vendorId == null || printer.productId == null) {
+                    if (printer.usbParams == null) {
                         Log.e("POSPrinters", "Connect failed: Missing vendorId or productId for USB connection.")
-                        callback(Result.success(ConnectResult(success = false, message = "Missing vendorId or productId for USB connection")))
+                        callback(Result.failure(Exception("Missing vendorId or productId for USB connection")))
                         return
                     }
 
-                    Log.d("POSPrinters", "Searching for USB device VID=${printer.vendorId}, PID=${printer.productId}, Serial=${printer.usbSerialNumber}")
-                    val usbDevice = findUsbDevice(printer.vendorId.toInt(), printer.productId.toInt(), printer.usbSerialNumber)
+                    Log.d("POSPrinters", "Searching for USB device VID=${printer.usbParams.vendorId}, PID=${printer.usbParams.productId}, Serial=${printer.usbParams.usbSerialNumber}")
+                    val usbDevice = findUsbDevice(printer.usbParams.vendorId.toInt(), printer.usbParams.productId.toInt(), printer.usbParams.usbSerialNumber)
 
                     if (usbDevice == null) {
-                        Log.e("POSPrinters", "Connect failed: USB device VID=${printer.vendorId}, PID=${printer.productId}, Serial=${printer.usbSerialNumber} not found.")
-                        callback(Result.success(ConnectResult(success = false, message = "USB device not found (VID=${printer.vendorId}, PID=${printer.productId})")))
+                        Log.e("POSPrinters", "Connect failed: USB device VID=${printer.usbParams.vendorId}, PID=${printer.usbParams.productId}, Serial=${printer.usbParams.usbSerialNumber} not found.")
+                        callback(Result.failure(Exception("USB device not found")))
                         return
                     }
 
@@ -561,7 +571,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     if (!usbManager.hasPermission(usbDevice)) {
                         Log.e("POSPrinters", "Connect failed: USB permission denied for device ${usbDevice.deviceName}")
 
-                        callback(Result.success(ConnectResult(success = false, message = "USB permission denied for device ${usbDevice.deviceName}")))
+                        callback(Result.failure(Exception("USB permission denied")))
                         return
                     }
 
@@ -570,14 +580,14 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     connectionTargetInfo = usbDevice.deviceName
                 }
                 PosPrinterConnectionType.NETWORK -> {
-                    if (printer.ipAddress == null) {
+                    if (printer.networkParams?.ipAddress == null) {
                         Log.e("POSPrinters", "Connect failed: Missing ipAddress for Network connection.")
-                        callback(Result.success(ConnectResult(success = false, message = "Missing ipAddress for Network connection")))
+                        callback(Result.failure(Exception("Missing ipAddress for Network connection")))
                         return
                     }
-                    Log.d("POSPrinters", "Preparing network connection to ${printer.ipAddress}")
+                    Log.d("POSPrinters", "Preparing network connection to ${printer.networkParams.ipAddress}")
                     newConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-                    connectionTargetInfo = "${printer.ipAddress}"
+                    connectionTargetInfo = printer.networkParams.ipAddress
                 }
 
             }
@@ -595,19 +605,19 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                         POSConnect.CONNECT_SUCCESS -> {
                             Log.i("POSPrinters", "CONNECT_SUCCESS for key=$key, info=$connInfo")
                             connectionsMap[key] = newConnection
-                            callback(Result.success(ConnectResult(success = true, message = "Connected successfully to $connInfo")))
+                            callback(Result.success(Unit))
                             replySubmitted = true
                         }
                         POSConnect.CONNECT_FAIL -> {
                             Log.w("POSPrinters", "CONNECT_FAIL for key=$key, info=$connInfo, msg=$msg")
                             connectionsMap.remove(key)
-                            callback(Result.success(ConnectResult(success = false, message = "Connection failed to $connInfo: $msg")))
+                            callback(Result.failure(Exception("Connection failed for $connInfo: $msg")))
                             replySubmitted = true
                         }
                         POSConnect.CONNECT_INTERRUPT -> {
                             Log.w("POSPrinters", "CONNECT_INTERRUPT for key=$key, info=$connInfo, msg=$msg")
                             connectionsMap.remove(key)
-                            callback(Result.success(ConnectResult(success = false, message = "Connection interrupted for $connInfo: $msg")))
+                            callback(Result.failure(Exception("Connection interrupted for $connInfo: $msg")))
                             replySubmitted = true
                         }
 
@@ -620,7 +630,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
         } catch (platformError: Throwable) {
             Log.e("POSPrinters", "Exception during connectPrinter setup for key=$key: ${platformError.message}", platformError)
-            callback(Result.success(ConnectResult(success = false, message = "Connect exception: ${platformError.message}")))
+            callback(Result.failure(Exception("Connection setup exception: ${platformError.message}")))
         }
     }
 
@@ -656,7 +666,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         upsideDown: Boolean,
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d("POSPrinters", "printData called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}, data size: ${data.size}, upsideDown: $upsideDown")
+        Log.d("POSPrinters", "printData called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}, data size: ${data.size}, upsideDown: $upsideDown")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -701,7 +711,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         upsideDown: Boolean,
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d("POSPrinters", "printHTML called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}, width: $width, upsideDown: $upsideDown")
+        Log.d("POSPrinters", "printHTML called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}, width: $width, upsideDown: $upsideDown")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -750,7 +760,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     }
 
     override fun openCashBox(printer: PrinterConnectionParams, callback: (Result<Unit>) -> Unit) {
-        Log.d("POSPrinters", "openCashBox called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}")
+        Log.d("POSPrinters", "openCashBox called for type: ${printer.connectionType}, SN/IP: ${printer.usbParams?.usbSerialNumber ?: printer.networkParams?.ipAddress}")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -774,7 +784,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     }
 
     override fun getPrinterStatus(printer: PrinterConnectionParams, callback: (Result<StatusResult>) -> Unit) {
-        Log.d("POSPrinters", "getPrinterStatus called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -804,7 +813,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     }
 
     override fun getPrinterSN(printer: PrinterConnectionParams, callback: (Result<StringResult>) -> Unit) {
-        Log.d("POSPrinters", "getPrinterSN called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}")
         withConnectionOrError(
             printer,
             "No active connection found for key=${getConnectionKey(printer)}",
@@ -859,18 +867,18 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             when (printer.connectionType) {
                 PosPrinterConnectionType.USB -> {
 
-                    if (printer.vendorId == null || printer.productId == null) {
+                    if (printer.usbParams == null) {
                         Log.e("POSPrinters", "setNetSettingsToPrinter failed: Missing vendorId or productId for USB connection.")
                         callback(Result.failure(Exception("Missing vendorId or productId for USB connection.")))
                         return
                     }
 
-                    Log.d("POSPrinters", "setNetSettingsToPrinter: Searching for USB device VID=${printer.vendorId}, PID=${printer.productId}, Serial=${printer.usbSerialNumber}")
-                    val usbDevice = findUsbDevice(printer.vendorId.toInt(), printer.productId.toInt(), printer.usbSerialNumber)
+                    Log.d("POSPrinters", "setNetSettingsToPrinter: Searching for USB device VID=${printer.usbParams.vendorId}, PID=${printer.usbParams.productId}, Serial=${printer.usbParams.usbSerialNumber}")
+                    val usbDevice = findUsbDevice(printer.usbParams.vendorId.toInt(), printer.usbParams.productId.toInt(), printer.usbParams.usbSerialNumber)
 
                     if (usbDevice == null) {
-                        Log.e("POSPrinters", "setNetSettingsToPrinter failed: USB device VID=${printer.vendorId}, PID=${printer.productId}, Serial=${printer.usbSerialNumber} not found.")
-                        callback(Result.failure(Exception("USB device not found (VID=${printer.vendorId}, PID=${printer.productId})")))
+                        Log.e("POSPrinters", "setNetSettingsToPrinter failed: USB device VID=${printer.usbParams.vendorId}, PID=${printer.usbParams.productId}, Serial=${printer.usbParams.usbSerialNumber} not found.")
+                        callback(Result.failure(Exception("USB device not found (VID=${printer.usbParams.vendorId}, PID=${printer.usbParams.productId})")))
                         return
                     }
 
@@ -886,14 +894,14 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     connectionTargetInfo = usbDevice.deviceName
                 }
                 PosPrinterConnectionType.NETWORK -> {
-                    if (printer.ipAddress == null) {
+                    if (printer.networkParams == null) {
                         Log.e("POSPrinters", "setNetSettingsToPrinter failed: Missing ipAddress for Network connection.")
                         callback(Result.failure(Exception("Missing ipAddress for Network connection.")))
                         return
                     }
-                    Log.d("POSPrinters", "setNetSettingsToPrinter: Preparing temp network connection to ${printer.ipAddress}")
+                    Log.d("POSPrinters", "setNetSettingsToPrinter: Preparing temp network connection to ${printer.networkParams.ipAddress}")
                     newPrinterConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-                    connectionTargetInfo = "${printer.ipAddress}"
+                    connectionTargetInfo = printer.networkParams.ipAddress
                 }
             }
 
@@ -1003,7 +1011,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         width: Long, // Note: width might be ignored for raw label commands
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d("POSPrinters", "printLabelData called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}, lang: $language, data size: ${labelCommands.size}")
         withConnectionOrError(
             printer,
             "No active connection found.",
@@ -1050,7 +1057,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         height: Long,
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d("POSPrinters", "printLabelHTML called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}, lang: $language, width: $width, height: $height")
         withConnectionOrError(
             printer,
             "No active connection found.",
@@ -1116,74 +1122,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
-    override fun setupLabelParams(
-        printer: PrinterConnectionParams,
-        language: LabelPrinterLanguage,
-        labelWidth: Long,
-        labelHeight: Long,
-        densityOrDarkness: Long,
-        speed: Long,
-        callback: (Result<Unit>) -> Unit
-    ) {
-        Log.d("POSPrinters", "setupLabelParams called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}, lang: $language, w:$labelWidth, h:$labelHeight, density:$densityOrDarkness, speed:$speed")
-        withConnectionOrError(
-            printer,
-            "No active connection found.",
-            callback
-        ) { connection ->
-            try {
-                when (language) {
-                    LabelPrinterLanguage.CPCL -> {
-                        val cpcl = CPCLPrinter(connection)
-                        // CPCLPrinter:
-                        //   initializePrinter(offset=0, height=..., qty=1)
-                        Log.d("POSPrinters", "Setting up CPCL params...")
-                        //   addSpeed(level)  (0..5)
-                        cpcl.initializePrinter(labelHeight.toInt(), 1)
-                        cpcl.addSpeed(speed.toInt())
-                        // densityOrDarkness в CPCL нет явного, но можно adjust
-                        // cpcl.sendData(...) если нужно
-                        Log.d("POSPrinters", "CPCL params set (assumed success).")
-                    }
-                    LabelPrinterLanguage.TSPL -> {
-                        val tspl = TSPLPrinter(connection)
-                        // TSPLPrinter:
-                        //   sizeMm(width, height) или sizeInch(...)
-                        Log.d("POSPrinters", "Setting up TSPL params...")
-                        //   density(...)
-                        //   speed(...)
-                        //   cls()
-                        tspl.sizeMm(labelWidth.toDouble(), labelHeight.toDouble())
-                        tspl.gapMm(5.0, 5.0) // TODO: Make gap configurable?
-                        tspl.reference(5,5) // TODO: Make reference configurable?
-                        tspl.offsetMm(0.0) // TODO: Make offset configurable?
-                        tspl.density(densityOrDarkness.toInt())
-                        tspl.speed(speed.toDouble()) // speed(...) обычно double
-                        tspl.cls()
-                        Log.d("POSPrinters", "TSPL params set (assumed success).")
-                    }
-                    LabelPrinterLanguage.ZPL -> {
-                        val zpl = ZPLPrinter(connection)
-                        // ZPLPrinter:
-                        //   setPrinterWidth(...)
-                        //   setPrintSpeed(int speed)
-                        Log.d("POSPrinters", "Setting up ZPL params...")
-                        //   setPrintDensity(int density)
-                        zpl.setPrinterWidth(labelWidth.toInt())
-                        zpl.setPrintSpeed(speed.toInt())     // speed in in/sec
-                        zpl.setPrintDensity(densityOrDarkness.toInt())
-                        Log.d("POSPrinters", "ZPL params set (assumed success).")
-                    }
-                }
-                // Assume success if no exception during setup commands
-                callback(Result.success(Unit))
-            } catch (e: Throwable) {
-                Log.e("POSPrinters", "Exception during setupLabelParams: ${e.message}", e)
-                callback(Result.failure(Exception("Setup label params exception: ${e.message}")))
-            }
-        }
-    }
-
     // =============== Вспомогательные ===============
     private fun parseData(str: String): ByteArray? {
         val arr = str.split('.')
@@ -1208,115 +1146,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             parts.map { it.toInt(16).toByte() }.toByteArray()
         } catch (e: NumberFormatException) {
             null
-        }
-    }
-
-    // Note: This implementation fetches details asynchronously.
-    // Consider using Kotlin Coroutines for cleaner async handling if complexity increases.
-    override fun getPrinterDetails(printer: PrinterConnectionParams, callback: (Result<PrinterDetailsDTO>) -> Unit) {
-        Log.d("POSPrinters", "getPrinterDetails called for type: ${printer.connectionType}, SN/IP: ${printer.usbSerialNumber ?: printer.ipAddress}")
-        val key = getConnectionKey(printer)
-        val connection = connectionsMap[key]
-
-        if (connection == null) {
-            Log.w("POSPrinters", "getPrinterDetails: No active connection found for key=$key")
-            callback(Result.failure(Exception("No active connection found for key=$key")))
-            return
-        }
-
-        // Variables to hold results and track completion
-        var serialNumber: String? = null
-        var currentStatus: String? = null
-        var snError: String? = null
-        var statusError: String? = null
-        var callbacksCompleted = 0
-        val totalCallbacksExpected = 2 // SN + Status
-
-        // Function to call when both async operations (SN, Status) are done
-        val onComplete = {
-            Handler(Looper.getMainLooper()).post {
-                Log.d("POSPrinters", "getPrinterDetails onComplete: SN Error: $snError, Status Error: $statusError")
-                if (snError != null || statusError != null) {
-                    val combinedErrorMessage = listOfNotNull(snError, statusError).joinToString("; ")
-                    Log.e("POSPrinters", "Failed to get full printer details: $combinedErrorMessage")
-                    callback(Result.failure(Exception("Failed to get full printer details: $combinedErrorMessage")))
-                } else {
-                    val details = PrinterDetailsDTO(
-                        serialNumber = serialNumber,
-                        currentStatus = currentStatus,
-                        firmwareVersion = null,
-                        deviceModel = null
-                    )
-                    Log.i("POSPrinters", "Successfully retrieved printer details: SN=$serialNumber, Status=$currentStatus")
-                    callback(Result.success(details))
-                }
-            }
-        }
-
-        Log.d("POSPrinters", "getPrinterDetails: Requesting SN...")
-        try {
-            val posSN = POSPrinter(connection)
-            posSN.getSerialNumber { snBytes ->
-                Log.d("POSPrinters", "getPrinterDetails: SN callback received.")
-                serialNumber = try {
-                    String(snBytes, charset("GBK"))
-                } catch (e: Exception) {
-                    try { String(snBytes, Charsets.UTF_8) } catch (e2: Exception) { "Error decoding SN" }
-                }
-                Log.d("POSPrinters", "getPrinterDetails: Decoded SN: $serialNumber")
-                synchronized(this) {
-                    callbacksCompleted++
-                    Log.d("POSPrinters", "getPrinterDetails: SN callback complete. Total completed: $callbacksCompleted/$totalCallbacksExpected")
-                    if (callbacksCompleted == totalCallbacksExpected) onComplete()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("POSPrinters", "getPrinterDetails: Exception requesting SN: ${e.message}", e)
-            synchronized(this) {
-                snError = "Get SN exception: ${e.message}"
-                callbacksCompleted++
-                Log.d("POSPrinters", "getPrinterDetails: SN exception caught. Total completed: $callbacksCompleted/$totalCallbacksExpected")
-                if (callbacksCompleted == totalCallbacksExpected) onComplete()
-            }
-        }
-
-        Log.d("POSPrinters", "getPrinterDetails: Requesting Status...")
-        try {
-            val posStatus = POSPrinter(connection)
-            posStatus.printerStatus { status ->
-                Log.d("POSPrinters", "getPrinterDetails: Status callback received: code=$status")
-                currentStatus = when (status) {
-                    POSConst.STS_NORMAL -> "Normal status"
-                    POSConst.STS_COVEROPEN -> "Cover open"
-                    POSConst.STS_PAPEREMPTY -> "Paper empty"
-                    POSConst.STS_PRESS_FEED -> "Press the paper feed button"
-                    POSConst.STS_PRINTER_ERR -> "Printer error"
-                    -1 -> "Status check: Unknown errors"
-                    -3 -> "Status check: Connection disconnected"
-                    -4 -> "Status check: Receiving data timed out"
-                    else -> "Unknown status code: $status"
-                }
-                Log.d("POSPrinters", "getPrinterDetails: Mapped status: '$currentStatus'")
-                if (status < POSConst.STS_NORMAL || status == POSConst.STS_PRINTER_ERR) {
-                    Log.w("POSPrinters", "getPrinterDetails: Printer reported error status: $currentStatus (code=$status)")
-                    synchronized(this) {
-                        if (statusError == null) statusError = "Printer reported error status: $currentStatus"
-                    }
-                }
-                synchronized(this) {
-                    callbacksCompleted++
-                    Log.d("POSPrinters", "getPrinterDetails: Status callback complete. Total completed: $callbacksCompleted/$totalCallbacksExpected")
-                    if (callbacksCompleted == totalCallbacksExpected) onComplete()
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("POSPrinters", "getPrinterDetails: Exception requesting Status: ${e.message}", e)
-            synchronized(this) {
-                statusError = "Get status exception: ${e.message}"
-                callbacksCompleted++
-                Log.d("POSPrinters", "getPrinterDetails: Status exception caught. Total completed: $callbacksCompleted/$totalCallbacksExpected")
-                if (callbacksCompleted == totalCallbacksExpected) onComplete()
-            }
         }
     }
 

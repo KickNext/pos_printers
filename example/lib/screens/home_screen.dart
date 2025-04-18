@@ -34,7 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<PrinterItem> _connectedPrinters = [];
 
   bool _isSearching = false;
-  StreamSubscription<DiscoveredPrinter>? _searchSubscription;
+  StreamSubscription<DiscoveredPrinterDTO>? _searchSubscription;
 
   @override
   void initState() {
@@ -210,19 +210,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Настройка параметров лейбл-принтера
-  Future<void> _setupLabelParams(PrinterItem item) async {
-    try {
-      await _printerService.setupLabelParams(item);
-      if (mounted) {
-        _snackBarHelper
-            .showSuccessSnackbar('${item.language!.name} params set.');
-      }
-    } catch (e) {
-      _snackBarHelper.showErrorSnackbar('setupLabelParams error: $e');
-    }
-  }
-
   /// Настройка сетевых параметров через активное соединение
   Future<void> _setNetSettingsViaConnection(
       PrinterItem item, NetSettingsDTO settings) async {
@@ -242,7 +229,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Настройка сетевых параметров через UDP broadcast
   Future<void> _configureNetViaUDP(
       PrinterItem item, NetSettingsDTO settings) async {
-    final mac = item.discoveredPrinter.macAddress;
+    final mac = item.discoveredPrinter.networkParams?.macAddress;
     if (mac == null || mac.isEmpty) {
       _snackBarHelper.showErrorSnackbar(
           'MAC Address not found for this printer. Cannot configure via UDP.');
@@ -324,10 +311,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       item.language = lang;
     });
-    // If printer is connected and it's a label printer, setup params
-    if (_connectedPrinters.contains(item) && item.isLabelPrinter) {
-      _setupLabelParams(item);
-    }
   }
 
   @override
@@ -347,7 +330,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   for (final p in _connectedPrinters) {
                     if (p.isLabelPrinter) {
                       if (p.language != null) {
-                        await _setupLabelParams(p);
                         await _printLabelHtml(p);
                         await Future.delayed(const Duration(milliseconds: 500));
                         await _printLabelRaw(p);

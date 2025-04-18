@@ -11,6 +11,8 @@ import 'package:pigeon/pigeon.dart';
     package: 'com.kicknext.pos_printers.gen',
   ),
 ))
+
+
 enum PosPrinterConnectionType {
   usb,
   network,
@@ -23,7 +25,6 @@ enum LabelPrinterLanguage {
   zpl,
 }
 
-
 class PrinterConnectionParams {
   final PosPrinterConnectionType connectionType;
   final UsbParams? usbParams;
@@ -31,8 +32,8 @@ class PrinterConnectionParams {
 
   PrinterConnectionParams({
     required this.connectionType,
-    this.usbParams,
-    this.networkParams,
+    required this.usbParams,
+    required this.networkParams,
   });
 }
 
@@ -46,9 +47,9 @@ class UsbParams {
   UsbParams({
     required this.vendorId,
     required this.productId,
-    this.usbSerialNumber,
-    this.manufacturer,
-    this.productName,
+    required this.usbSerialNumber,
+    required this.manufacturer,
+    required this.productName,
   });
 }
 
@@ -61,10 +62,10 @@ class NetworkParams {
 
   NetworkParams({
     required this.ipAddress,
-    this.mask,
-    this.gateway,
-    this.macAddress,
-    this.dhcp,
+    required this.mask,
+    required this.gateway,
+    required this.macAddress,
+    required this.dhcp,
   });
 }
 
@@ -82,89 +83,49 @@ class NetSettingsDTO {
   });
 }
 
-class ConnectResult {
-  final bool success;
-  final String? message;
-
-  ConnectResult({
-    required this.success,
-    this.message,
-  });
-}
-
 /// DTO с расширенной информацией о принтере
-class PrinterDetailsDTO {
-  final String? serialNumber;
-  final String? firmwareVersion;
-  final String? deviceModel;
-  final String? currentStatus;
+// class PrinterDetailsDTO {
+//   final String? serialNumber;
+//   final String? firmwareVersion;
+//   final String? deviceModel;
+//   final String? currentStatus;
 
-  PrinterDetailsDTO({
-    this.serialNumber,
-    this.firmwareVersion,
-    this.deviceModel,
-    this.currentStatus,
-  });
-}
+//   PrinterDetailsDTO({
+//     this.serialNumber,
+//     this.firmwareVersion,
+//     this.deviceModel,
+//     this.currentStatus,
+//   });
+// }
 
 /// Result for getting printer status.
 class StatusResult {
   final bool success;
   final String? errorMessage;
-  final String? status; // The actual status string if successful
+  final String? status; 
 
   StatusResult({required this.success, this.errorMessage, this.status});
 }
-
-/// Result for getting printer serial number or other string values.
 class StringResult {
   final bool success;
   final String? errorMessage;
-  final String? value; // The actual string value (e.g., SN) if successful
+  final String? value; 
 
   StringResult({required this.success, this.errorMessage, this.value});
 }
 
-/// DTO для найденного принтера (USB или Сеть) - результат поиска `findPrinters`.
-/// Содержит информацию, достаточную для отображения пользователю и
-/// для создания `PrinterConnectionParams` для последующего подключения.
-class DiscoveredPrinter {
-  /// Уникальный идентификатор *найденного* устройства в данный момент.
-  /// Для USB: это временный `deviceName` (например, /dev/bus/usb/001/002). Не стабилен!
-  /// Для Network: это `ip` (например, 192.168.1.100). Стабилен, если IP не меняется.
+class DiscoveredPrinterDTO {
   final String id;
-  final PosPrinterConnectionType type; // "usb" или "network"
-  /// Человекочитаемое имя/метка принтера.
-  final String
-      label; // e.g. "XPrinter (VID:123, PID:456)" or "Network Printer 192.168.1.100"
+  final PosPrinterConnectionType type; 
+  final UsbParams? usbParams;
+  final NetworkParams?
+      networkParams; 
 
-  // --- Стабильные идентификаторы для ПОДКЛЮЧЕНИЯ ---
-  // Используйте эти поля для создания PrinterConnectionParams!
-  // USB
-  final int? vendorId;
-  final int? productId;
-  final String? usbSerialNumber; // Может быть null, если недоступен
-  // Network
-  final String? ipAddress; // IP адрес
-  final String? macAddress; // MAC адрес (если удалось определить)
-
-  // --- Дополнительная информация ---
-  final String? manufacturer; // Производитель (USB)
-  final String? productName; // Название продукта (USB)
-
-  DiscoveredPrinter({
+  DiscoveredPrinterDTO({
     required this.id,
     required this.type,
-    required this.label,
-    // Stable IDs for connection
-    this.vendorId,
-    this.productId,
-    this.usbSerialNumber,
-    this.ipAddress, // Добавлен IP
-    this.macAddress,
-    // Additional info
-    this.manufacturer,
-    this.productName,
+    this.usbParams,
+    this.networkParams,
   });
 }
 
@@ -185,19 +146,10 @@ abstract class POSPrintersApi {
   /// 7. Вызвать `disconnectPrinter()`.
   void findPrinters();
 
-  /// Подключается к принтеру, используя параметры из `printer`.
-  /// Для USB: необходимы `vendorId`, `productId`. `usbSerialNumber` желателен.
-  /// Для Network: необходим `ipAddress`.
-  /// Возвращает `ConnectResult` с успехом/ошибкой подключения.
-  /// При успешном подключении плагин сохраняет соединение для последующих операций.
-  /// Если для этих параметров уже есть активное соединение, оно будет разорвано перед новым подключением.
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  ConnectResult connectPrinter(PrinterConnectionParams printer);
+  void connectPrinter(PrinterConnectionParams printer);
 
-  /// Отключает принтер, идентифицированный параметрами `printer`.
-  /// Используйте те же параметры (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`),
-  /// которые использовались для `connectPrinter`.
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void disconnectPrinter(PrinterConnectionParams printer);
@@ -239,8 +191,6 @@ abstract class POSPrintersApi {
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void configureNetViaUDP(String macAddress, NetSettingsDTO netSettings);
 
-  // ====== Новые методы для ЛЕЙБЛ-ПРИНТЕРОВ ======
-
   /// Печать "сырых" команд (CPCL/TSPL/ZPL), если нужно.
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
@@ -261,23 +211,6 @@ abstract class POSPrintersApi {
     int width,
     int height,
   );
-
-  /// Установка базовых параметров (размер этикетки, скорость, плотность)
-  @async
-  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void setupLabelParams(
-    PrinterConnectionParams printer,
-    LabelPrinterLanguage language,
-    int labelWidth,
-    int labelHeight,
-    int densityOrDarkness,
-    int speed,
-  );
-
-  /// Получение расширенной информации о принтере
-  @async
-  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  PrinterDetailsDTO getPrinterDetails(PrinterConnectionParams printer);
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.
@@ -287,7 +220,7 @@ abstract class PrinterDiscoveryEventsApi {
   /// `printer` содержит информацию о найденном принтере. Используйте стабильные
   /// идентификаторы из него (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`)
   /// для создания `PrinterConnectionParams` при вызове `connectPrinter`.
-  void onPrinterFound(DiscoveredPrinter printer);
+  void onPrinterFound(DiscoveredPrinterDTO printer);
 
   /// Вызывается по завершении всего процесса поиска.
   /// `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).

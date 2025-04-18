@@ -49,7 +49,8 @@ class PrinterListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isNetwork =
         item.discoveredPrinter.type == PosPrinterConnectionType.network;
-    final bool hasMAC = item.discoveredPrinter.macAddress?.isNotEmpty ?? false;
+    final bool hasMAC =
+        item.discoveredPrinter.networkParams?.macAddress?.isNotEmpty ?? false;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -73,7 +74,10 @@ class PrinterListTile extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.discoveredPrinter.label,
+                        item.discoveredPrinter.type ==
+                                PosPrinterConnectionType.usb
+                            ? 'USB Printer'
+                            : 'Network Printer',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -83,9 +87,10 @@ class PrinterListTile extends StatelessWidget {
                         'ID: ${item.discoveredPrinter.id}',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
-                      if (item.discoveredPrinter.manufacturer != null)
+                      if (item.discoveredPrinter.usbParams?.manufacturer !=
+                          null)
                         Text(
-                          'Manufacturer: ${item.discoveredPrinter.manufacturer}',
+                          'Manufacturer: ${item.discoveredPrinter.usbParams?..manufacturer}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                     ],

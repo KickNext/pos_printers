@@ -3,7 +3,7 @@ import 'package:pos_printers/pos_printers.dart';
 /// Модель для хранения информации о принтере в пользовательском интерфейсе.
 class PrinterItem {
   /// Оригинальный объект обнаруженного принтера
-  final DiscoveredPrinter discoveredPrinter;
+  final DiscoveredPrinterDTO discoveredPrinter;
 
   /// Параметры подключения к принтеру
   late final PrinterConnectionParams connectionParams;
@@ -33,19 +33,19 @@ class PrinterItem {
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.usb,
         usbParams: UsbParams(
-          vendorId: discoveredPrinter.vendorId!,
-          productId: discoveredPrinter.productId!,
-          usbSerialNumber: discoveredPrinter.usbSerialNumber,
-          manufacturer: discoveredPrinter.manufacturer,
-          productName: discoveredPrinter.productName,
+          vendorId: discoveredPrinter.usbParams!.vendorId,
+          productId: discoveredPrinter.usbParams!.productId,
+          usbSerialNumber: discoveredPrinter.usbParams!.usbSerialNumber,
+          manufacturer: discoveredPrinter.usbParams!.manufacturer,
+          productName: discoveredPrinter.usbParams!.productName,
         ),
       );
     } else {
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.network,
         networkParams: NetworkParams(
-          ipAddress: discoveredPrinter.ipAddress!,
-          macAddress: discoveredPrinter.macAddress,
+          ipAddress: discoveredPrinter.networkParams!.ipAddress,
+          macAddress: discoveredPrinter.networkParams!.macAddress,
         ),
       );
     }

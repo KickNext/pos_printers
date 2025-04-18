@@ -45,11 +45,11 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
 
   /// Stream controller for emitting discovered printers during a scan.
   /// Use broadcast to allow multiple listeners if needed, though typically one is enough.
-  StreamController<DiscoveredPrinter>? _printerDiscoveryController;
+  StreamController<DiscoveredPrinterDTO>? _printerDiscoveryController;
 
   /// Stream providing discovered printers. Listen to this after calling [findPrinters].
   /// The stream closes when discovery is complete or an error occurs.
-  Stream<DiscoveredPrinter> get discoveryStream =>
+  Stream<DiscoveredPrinterDTO> get discoveryStream =>
       _printerDiscoveryController?.stream ?? const Stream.empty();
 
   /// Completer to signal the end of the discovery process (success or failure).
@@ -72,7 +72,7 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   // --- Native Callbacks Implementation (PrinterDiscoveryEventsApi) ---
 
   @override
-  void onPrinterFound(DiscoveredPrinter printer) {
+  void onPrinterFound(DiscoveredPrinterDTO printer) {
     if (!(_printerDiscoveryController?.isClosed ?? true)) {
       _printerDiscoveryController!.add(printer);
     } else {
@@ -117,7 +117,7 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   ///
   /// You can also await the Future returned by [awaitDiscoveryComplete] to know when
   /// the discovery process has fully completed (successfully or with an error).
-  Stream<DiscoveredPrinter> findPrinters() {
+  Stream<DiscoveredPrinterDTO> findPrinters() {
     // Prevent concurrent scans
     if (_printerDiscoveryController != null &&
         !_printerDiscoveryController!.isClosed) {
@@ -127,7 +127,7 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     // Close previous controller just in case (should be null if completed properly)
     _printerDiscoveryController?.close();
     _printerDiscoveryController =
-        StreamController<DiscoveredPrinter>.broadcast();
+        StreamController<DiscoveredPrinterDTO>.broadcast();
     _discoveryCompleter = Completer<void>();
 
     try {
@@ -174,12 +174,10 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// the appropriate [PrinterConnectionParams].
   ///
   /// Returns a [ConnectResult] indicating success or failure.
-  Future<ConnectResult> connectPrinter(PrinterConnectionParams printer) async {
-    return _executeApiCall<ConnectResult>(
+  Future<void> connectPrinter(PrinterConnectionParams printer) async {
+    return _executeApiCall<void>(
       'Connect to printer',
       () => _api.connectPrinter(printer),
-      defaultErrorResult: ConnectResult(
-          success: false, message: 'Connection to printer failed'),
     );
   }
 
@@ -316,42 +314,6 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     return _executeApiCall<void>(
       'Print HTML label',
       () => _api.printLabelHTML(printer, language, html, width, height),
-    );
-  }
-
-  /// Sets up basic parameters for a label printer.
-  ///
-  /// [printer]: Connection parameters of the target printer.
-  /// [language]: The command language ([LabelPrinterLanguage]) to use.
-  /// [labelWidth]: Label width (units depend on language/printer, often dots or mm).
-  /// [labelHeight]: Label height (units depend on language/printer, often dots or mm).
-  /// [densityOrDarkness]: Printing density or darkness (range depends on language/printer).
-  /// [speed]: Printing speed (range depends on language/printer).
-  Future<void> setupLabelParams(
-    PrinterConnectionParams printer,
-    LabelPrinterLanguage language,
-    int labelWidth,
-    int labelHeight,
-    int densityOrDarkness,
-    int speed,
-  ) async {
-    return _executeApiCall<void>(
-      'Set up label parameters',
-      () => _api.setupLabelParams(
-          printer, language, labelWidth, labelHeight, densityOrDarkness, speed),
-    );
-  }
-
-  /// Gets detailed information about the connected printer.
-  ///
-  /// Returns a [PrinterDetailsDTO] containing information like serial number,
-  /// status, and potentially model/firmware (if available via SDK).
-  /// Returns a [PrinterDetailsDTO] on success. Throws an exception on failure.
-  Future<PrinterDetailsDTO> getPrinterDetails(
-      PrinterConnectionParams printer) async {
-    return _executeApiCall<PrinterDetailsDTO>(
-      'Get printer details',
-      () => _api.getPrinterDetails(printer),
     );
   }
 }

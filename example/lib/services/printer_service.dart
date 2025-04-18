@@ -12,7 +12,7 @@ class PrinterService {
   final PosPrintersManager _posPrintersManager = PosPrintersManager();
 
   /// Запуск поиска принтеров
-  Stream<DiscoveredPrinter> findPrinters() {
+  Stream<DiscoveredPrinterDTO> findPrinters() {
     final stream = _posPrintersManager.findPrinters();
     return stream;
   }
@@ -28,12 +28,12 @@ class PrinterService {
   }
 
   /// Сравниваем принтеры по ID (usbPath или ip:port)
-  bool samePrinter(DiscoveredPrinter a, DiscoveredPrinter b) {
+  bool samePrinter(DiscoveredPrinterDTO a, DiscoveredPrinterDTO b) {
     return a.id == b.id;
   }
 
   /// Подключаемся к принтеру
-  Future<ConnectResult> connectToPrinter(PrinterItem item) {
+  Future<void> connectToPrinter(PrinterItem item) {
     return _posPrintersManager.connectPrinter(item.connectionParams);
   }
 
@@ -129,25 +129,6 @@ class PrinterService {
     );
   }
 
-  /// Пример смены настроек лейбл (размер, скорость, плотность)
-  Future<void> setupLabelParams(PrinterItem item) async {
-    if (!item.isLabelPrinter || item.language == null) {
-      throw Exception('Требуется указать язык для принтера этикеток');
-    }
-    const int labelWidthMm = 58;
-    const int labelHeightMm = 40;
-    const int density = 15;
-    const int speed = 4;
-    await _posPrintersManager.setupLabelParams(
-      item.connectionParams,
-      item.language!,
-      labelWidthMm,
-      labelHeightMm,
-      density,
-      speed,
-    );
-  }
-
   /// Sets network settings via active connection
   Future<void> setNetSettingsViaConnection(
       PrinterItem item, NetSettingsDTO settings) async {
@@ -160,7 +141,7 @@ class PrinterService {
   /// Configures network settings via UDP broadcast
   Future<void> configureNetViaUDP(
       PrinterItem item, NetSettingsDTO settings) async {
-    final mac = item.discoveredPrinter.macAddress;
+    final mac = item.discoveredPrinter.networkParams?.macAddress;
     if (mac == null || mac.isEmpty) {
       throw Exception(
           'MAC-адрес не найден для этого принтера. Невозможно настроить по UDP.');
