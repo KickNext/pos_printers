@@ -8,7 +8,6 @@ class ConnectedPrintersSection extends StatelessWidget {
   final List<PrinterItem> connectedPrinters;
   final Function(PrinterItem) onDisconnect;
   final Function(PrinterItem) onGetStatus;
-  final Function(PrinterItem, bool) onToggleUpsideDown;
   final Function(PrinterItem) onSetNetworkSettings;
   final Function(PrinterItem, LabelPrinterLanguage?) onLanguageSelected;
   final Function(PrinterItem) onPrintEscHtml; // Callback for printing ESC/POS HTML
@@ -22,7 +21,6 @@ class ConnectedPrintersSection extends StatelessWidget {
     required this.connectedPrinters,
     required this.onDisconnect,
     required this.onGetStatus,
-    required this.onToggleUpsideDown,
     required this.onSetNetworkSettings,
     required this.onLanguageSelected,
     required this.onPrintEscHtml,
@@ -58,7 +56,6 @@ class ConnectedPrintersSection extends StatelessWidget {
               onConnect: (_) {}, // Already connected
               onDisconnect: onDisconnect,
               onGetStatus: onGetStatus,
-              onToggleUpsideDown: onToggleUpsideDown,
               onSetNetworkSettings: onSetNetworkSettings,
               onConfigureUdp: (_) {}, // Not applicable here
               onLanguageSelected: onLanguageSelected,

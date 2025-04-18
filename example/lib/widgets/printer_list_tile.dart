@@ -19,9 +19,6 @@ class PrinterListTile extends StatelessWidget {
   /// Callback для получения статуса принтера
   final Function(PrinterItem) onGetStatus;
 
-  /// Callback для переключения режима перевёрнутой печати
-  final Function(PrinterItem, bool) onToggleUpsideDown;
-
   /// Callback для настройки сетевых параметров
   final Function(PrinterItem) onSetNetworkSettings;
 
@@ -39,7 +36,6 @@ class PrinterListTile extends StatelessWidget {
     required this.onConnect,
     required this.onDisconnect,
     required this.onGetStatus,
-    required this.onToggleUpsideDown,
     required this.onSetNetworkSettings,
     required this.onConfigureUdp,
     required this.onLanguageSelected,
@@ -115,9 +111,7 @@ class PrinterListTile extends StatelessWidget {
 
             // Специфические для принтера этикеток опции
             if (item.isLabelPrinter)
-              _buildLabelPrinterOptions(context)
-            else if (isConnected)
-              _buildEscPosOptions(context),
+              _buildLabelPrinterOptions(context),
 
             // Опции настройки сети (только для сетевых принтеров)
             if (isNetwork && isConnected) _buildNetworkSettingsOption(context),
@@ -171,19 +165,6 @@ class PrinterListTile extends StatelessWidget {
               }).toList(),
             ),
           ],
-        ),
-      ],
-    );
-  }
-
-  /// Строит виджеты для опций ESC/POS принтера
-  Widget _buildEscPosOptions(BuildContext context) {
-    return Row(
-      children: [
-        const Text('Upside Down:'),
-        Switch(
-          value: item.isUpsideDown,
-          onChanged: (bool value) => onToggleUpsideDown(item, value),
         ),
       ],
     );

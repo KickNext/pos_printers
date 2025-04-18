@@ -14,9 +14,6 @@ class PrinterItem {
   /// Язык для принтера этикеток (CPCL, TSPL, ZPL)
   LabelPrinterLanguage? language;
 
-  /// Флаг для режима перевёрнутой печати
-  bool isUpsideDown = false;
-
   /// Создаёт объект [PrinterItem] на основе обнаруженного принтера.
   ///
   /// [discoveredPrinter] - найденный принтер из поиска
@@ -26,7 +23,6 @@ class PrinterItem {
     required this.discoveredPrinter,
     this.language,
     this.isLabelPrinter = false,
-    bool? upsideDown,
   }) {
     // Инициализация параметров подключения на основе обнаруженного принтера
     if (discoveredPrinter.type == PosPrinterConnectionType.usb) {
@@ -48,11 +44,6 @@ class PrinterItem {
           macAddress: discoveredPrinter.networkParams!.macAddress,
         ),
       );
-    }
-
-    // Инициализация флага перевёрнутой печати, если задан
-    if (upsideDown != null) {
-      isUpsideDown = upsideDown;
     }
   }
 }

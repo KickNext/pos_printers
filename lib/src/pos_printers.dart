@@ -228,7 +228,6 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [printer]: Connection parameters of the target printer.
   /// [html]: The HTML string to print.
   /// [width]: The printing width in dots.
-  /// [upsideDown]: Whether to print the content upside down.
   Future<void> printReceiptHTML(
       PrinterConnectionParams printer, String html, int width) async {
     return _executeApiCall<void>(
@@ -242,7 +241,6 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [printer]: Connection parameters of the target printer.
   /// [data]: The raw byte data (ESC/POS commands).
   /// [width]: The printing width in dots (may be relevant for some printers/commands).
-  /// [upsideDown]: Whether to print the content upside down.
   Future<void> printReceiptData(
       PrinterConnectionParams printer, Uint8List data, int width) async {
     return _executeApiCall<void>(

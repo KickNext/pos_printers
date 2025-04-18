@@ -297,15 +297,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Переключение режима перевёрнутой печати
-  Future<void> _toggleUpsideDownMode(PrinterItem item, bool value) async {
-    setState(() {
-      item.isUpsideDown = value;
-    });
-    _snackBarHelper.showSuccessSnackbar(
-        'Режим перевернутой печати установлен на: ${value ? "ВКЛ" : "ВЫКЛ"}');
-  }
-
   /// Обработка выбора языка из PrinterListTile
   void _handleLanguageSelected(PrinterItem item, LabelPrinterLanguage? lang) {
     setState(() {
@@ -384,7 +375,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     onConnect: (_) {}, // Already connected
                     onDisconnect: _disconnectPrinter,
                     onGetStatus: _getStatus,
-                    onToggleUpsideDown: _toggleUpsideDownMode,
                     onSetNetworkSettings: (item) =>
                         _showNetworkSettingsDialog(item: item, isUdp: false),
                     onConfigureUdp: (_) {}, // Not applicable for connected
@@ -418,7 +408,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           onConnect: _connectToPrinter,
                           onDisconnect: (_) {}, // Not connected
                           onGetStatus: (_) {}, // Not connected
-                          onToggleUpsideDown: (_, __) {}, // Not connected
                           onSetNetworkSettings: (_) {}, // Not connected
                           onConfigureUdp: (item) => _showNetworkSettingsDialog(
                               item: item, isUdp: true),

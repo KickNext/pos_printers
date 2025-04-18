@@ -44,7 +44,6 @@ class FoundPrintersSection extends StatelessWidget {
                       onConnect: onConnect,
                       onDisconnect: (_) {}, // Not applicable
                       onGetStatus: (_) {}, // Not applicable
-                      onToggleUpsideDown: (_, __) {}, // Not applicable
                       onSetNetworkSettings: (_) {}, // Not applicable
                       onConfigureUdp: onConfigureUdp,
                       onLanguageSelected: onLanguageSelected,
