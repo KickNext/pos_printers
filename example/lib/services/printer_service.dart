@@ -5,53 +5,56 @@ import 'package:pos_printers/pos_printers.dart';
 import '../models/printer_item.dart';
 import '../utils/html_templates.dart';
 
-/// Сервис для работы с принтерами, содержит методы для поиска, подключения,
-/// и выполнения операций с принтерами
+/// Service for working with printers: search, connect, and operations
 class PrinterService {
-  /// Менеджер для взаимодействия с принтерами
+  /// Manager for interacting with printers
   final PosPrintersManager _posPrintersManager = PosPrintersManager();
 
-  /// Запуск поиска принтеров
+  /// Stream of USB printer connection/disconnection events
+  Stream<PrinterConnectionEvent> get connectionEvents =>
+      _posPrintersManager.connectionEvents;
+
+  /// Start searching for printers
   Stream<DiscoveredPrinterDTO> findPrinters() {
     final stream = _posPrintersManager.findPrinters();
     return stream;
   }
 
-  /// Ожидание завершения процесса обнаружения
+  /// Wait for discovery process to complete
   Future<void> awaitDiscoveryComplete() {
     return _posPrintersManager.awaitDiscoveryComplete();
   }
 
-  /// Очистка ресурсов
+  /// Dispose resources
   void dispose() {
     _posPrintersManager.dispose();
   }
 
-  /// Сравниваем принтеры по ID (usbPath или ip:port)
+  /// Compare printers by ID (usbPath or ip:port)
   bool samePrinter(DiscoveredPrinterDTO a, DiscoveredPrinterDTO b) {
     return a.id == b.id;
   }
 
-  /// Подключаемся к принтеру
+  /// Connect to a printer
   Future<void> connectToPrinter(PrinterItem item) {
     return _posPrintersManager.connectPrinter(item.connectionParams);
   }
 
-  /// Отключаемся от принтера
+  /// Disconnect from a printer
   Future<void> disconnectPrinter(PrinterItem item) async {
     await _posPrintersManager.disconnectPrinter(item.connectionParams);
   }
 
-  /// Запрос статуса
+  /// Get printer status
   Future<StatusResult> getPrinterStatus(PrinterItem item) {
     return _posPrintersManager.getPrinterStatus(item.connectionParams);
   }
 
-  /// Пример печати HTML для чекового (ESC/POS)
+  /// Example: print HTML for receipt (ESC/POS)
   Future<void> printEscHtml(PrinterItem item) async {
-    if (item.isLabelPrinter) {
-      debugPrint('Skipping ESC/POS HTML print for label printer.');
-      throw Exception('Недопустимый тип принтера');
+    if (item.discoveredPrinter.printerType == PrinterType.zpl) {
+      debugPrint('Skipping ESC/POS HTML print for ZPL label printer.');
+      throw Exception('Invalid printer type: ZPL');
     }
     await _posPrintersManager.printReceiptHTML(
       item.connectionParams,
@@ -60,11 +63,11 @@ class PrinterService {
     );
   }
 
-  /// Печать ESC/POS сырых команд
+  /// Print raw ESC/POS commands
   Future<void> printEscPosData(PrinterItem item) async {
-    if (item.isLabelPrinter) {
-      debugPrint('Skipping ESC/POS raw print for label printer.');
-      throw Exception('Недопустимый тип принтера');
+    if (item.discoveredPrinter.printerType == PrinterType.zpl) {
+      debugPrint('Skipping ESC/POS raw print for ZPL label printer.');
+      throw Exception('Invalid printer type: ZPL');
     }
     List<int> bytes = [];
     bytes.addAll([0x1B, 0x40]); // Init
@@ -76,39 +79,35 @@ class PrinterService {
         item.connectionParams, Uint8List.fromList(bytes), 576);
   }
 
-  /// Печать лейбла сырыми командами (CPCL/TSPL/ZPL)
+  /// Print raw ZPL label commands
   Future<void> printLabelRaw(PrinterItem item) async {
-    if (!item.isLabelPrinter || item.language == null) {
-      throw Exception('Требуется указать язык для принтера этикеток');
+    if (item.discoveredPrinter.printerType != PrinterType.zpl) {
+      throw Exception('Only ZPL label printers are supported');
     }
-    String commands;
-    switch (item.language!) {
-      case LabelPrinterLanguage.cpcl:
-        commands =
-            "! 0 200 200 320 1\r\nTEXT 4 0 50 50 Hello CPCL\r\nPRINT\r\n";
-        break;
-      case LabelPrinterLanguage.tspl:
-        commands =
-            "SIZE 58 mm, 40 mm\r\nGAP 2 mm, 0 mm\r\nCLS\r\nTEXT 50,50,\"ROMAN.TTF\",0,12,12,\"Hello TSPL\"\r\nPRINT 1,1\r\n";
-        break;
-      case LabelPrinterLanguage.zpl:
-        commands =
-            "^XA\r\n^PW464\r\n^LL320\r\n^FO50,50^A0N,30,30^FDHello ZPL^FS\r\n^XZ\r\n";
-        break;
-    }
-    final data = Uint8List.fromList(commands.codeUnits);
+    // Simple ZPL sample
+    const commands = '''^XA
+  ^PW456
+  ^LL304            
+  ^CF0,30              
+  ^FO20,20^FDLuna Bloom Candle^FS
+  ^CF0,40             
+  ^FO20,60^FD\$24.99^FS
+  ^FO340,20
+  ^BQN,2,4           
+  ^FDLA,https://example.com/luna-bloom-candle^FS
+  ^XZ\r\n''';
     await _posPrintersManager.printLabelData(
       item.connectionParams,
-      item.language!,
-      data,
-      576,
+      LabelPrinterLanguage.zpl,
+      Uint8List.fromList(commands.codeUnits),
+      673,
     );
   }
 
-  /// Печать HTML на лейбл-принтер
+  /// Print HTML for ZPL label printer
   Future<void> printLabelHtml(PrinterItem item) async {
-    if (!item.isLabelPrinter || item.language == null) {
-      throw Exception('Требуется указать язык для принтера этикеток');
+    if (item.discoveredPrinter.printerType != PrinterType.zpl) {
+      throw Exception('Only ZPL label printers are supported');
     }
     final html = generatePriceTagHtml(
       itemName: 'Awesome Gadget',
@@ -116,22 +115,27 @@ class PrinterService {
       barcodeData: '123456789012',
       unit: 'pcs',
     );
-    const int widthDots = 464; // 58 * 8
-    const int heightDots = 320; // 40 * 8
+    const widthDots = 673; // 58 mm at 8 dots/mm
+    const heightDots = 449; // 40 mm at 8 dots/mm
     await _posPrintersManager.printLabelHTML(
       item.connectionParams,
-      item.language!,
+      LabelPrinterLanguage.zpl,
       html,
       widthDots,
       heightDots,
     );
   }
 
+  /// Get ZPL printer status
+  Future<ZPLStatusResult> getZPLPrinterStatus(PrinterItem item) async {
+    return _posPrintersManager.getZPLPrinterStatus(item.connectionParams);
+  }
+
   /// Sets network settings via active connection
   Future<void> setNetSettingsViaConnection(
       PrinterItem item, NetSettingsDTO settings) async {
     if (item.discoveredPrinter.type != PosPrinterConnectionType.network) {
-      throw Exception('Эта функция только для сетевых принтеров');
+      throw Exception('This function is only for network printers');
     }
     await _posPrintersManager.setNetSettings(item.connectionParams, settings);
   }
@@ -142,7 +146,7 @@ class PrinterService {
     final mac = item.discoveredPrinter.networkParams?.macAddress;
     if (mac == null || mac.isEmpty) {
       throw Exception(
-          'MAC-адрес не найден для этого принтера. Невозможно настроить по UDP.');
+          'MAC address not found for this printer. Cannot configure via UDP.');
     }
     await _posPrintersManager.configureNetViaUDP(mac, settings);
   }

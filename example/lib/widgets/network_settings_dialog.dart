@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:pos_printers/pos_printers.dart';
 
-/// Диалог для настройки сетевых параметров принтера
+/// Dialog for configuring printer network settings
 class NetworkSettingsDialog extends StatefulWidget {
-  /// Начальные настройки для заполнения полей формы
+  /// Initial settings to prefill the form fields
   final NetSettingsDTO initialSettings;
 
-  /// Создаёт диалог для настройки сетевых параметров принтера
+  /// Creates a dialog for configuring printer network settings
   const NetworkSettingsDialog({
     super.key,
     required this.initialSettings,
@@ -17,22 +17,22 @@ class NetworkSettingsDialog extends StatefulWidget {
 }
 
 class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
-  /// Контроллеры для текстовых полей формы
+  /// Controllers for form text fields
   late final TextEditingController _ipController;
   late final TextEditingController _maskController;
   late final TextEditingController _gatewayController;
 
-  /// Флаг использования DHCP (автоматическое получение IP)
+  /// DHCP usage flag (automatic IP assignment)
   bool _useDhcp = false;
 
-  /// Глобальный ключ для формы (используется для валидации)
+  /// Global key for the form (used for validation)
   final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
 
-    // Инициализация контроллеров начальными значениями
+    // Initialize controllers with initial values
     _ipController =
         TextEditingController(text: widget.initialSettings.ipAddress);
     _maskController = TextEditingController(text: widget.initialSettings.mask);
@@ -43,14 +43,14 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
 
   @override
   void dispose() {
-    // Очистка контроллеров при выходе
+    // Dispose controllers on exit
     _ipController.dispose();
     _maskController.dispose();
     _gatewayController.dispose();
     super.dispose();
   }
 
-  /// Проверяет, является ли строка валидным IP-адресом
+  /// Checks if a string is a valid IP address
   bool _isValidIpAddress(String value) {
     if (value.isEmpty) {
       return false;
@@ -86,7 +86,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Опция использования DHCP
+              // DHCP option
               CheckboxListTile(
                 title: const Text('Use DHCP'),
                 value: _useDhcp,
@@ -102,14 +102,14 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
                 contentPadding: EdgeInsets.zero,
               ),
 
-              // Настройки статического IP (если не используется DHCP)
+              // Static IP configuration (if DHCP is not used)
               if (!_useDhcp) ...[
                 const SizedBox(height: 16),
                 const Text('Static IP Configuration',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
 
-                // Поле для IP-адреса
+                // IP address field
                 TextFormField(
                   controller: _ipController,
                   decoration: const InputDecoration(
@@ -129,7 +129,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
                 ),
                 const SizedBox(height: 8),
 
-                // Поле для маски подсети
+                // Subnet mask field
                 TextFormField(
                   controller: _maskController,
                   decoration: const InputDecoration(
@@ -149,7 +149,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
                 ),
                 const SizedBox(height: 8),
 
-                // Поле для шлюза по умолчанию
+                // Default gateway field
                 TextFormField(
                   controller: _gatewayController,
                   decoration: const InputDecoration(
@@ -172,7 +172,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
         ),
       ),
       actions: [
-        // Кнопка отмены
+        // Cancel button
         TextButton(
           onPressed: () {
             Navigator.of(context).pop();
@@ -180,11 +180,11 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
           child: const Text('Cancel'),
         ),
 
-        // Кнопка сохранения
+        // Save button
         ElevatedButton(
           onPressed: () {
             if (_useDhcp || _formKey.currentState!.validate()) {
-              // Создаем DTO с настройками и возвращаем его
+              // Create DTO with settings and return it
               final settings = NetSettingsDTO(
                 ipAddress: _ipController.text,
                 mask: _maskController.text,

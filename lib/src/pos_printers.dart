@@ -1,7 +1,24 @@
 import 'dart:developer' as developer;
 import 'dart:async';
 import 'package:flutter/services.dart'; // Required for PlatformException
-import 'package:pos_printers/src/pos_printers.pigeon.dart';
+import 'package:pos_printers/src/pos_printers.pigeon.dart'; // contains PrinterDiscoveryFilter, ZPLStatusResult
+
+/// Тип события подключения/отключения принтера
+enum PrinterConnectionEventType { attached, detached }
+
+/// Событие подключения/отключения принтера
+class PrinterConnectionEvent {
+  final PrinterConnectionEventType type;
+  final DiscoveredPrinterDTO? printer;
+  final String? id;
+  final String? message;
+  PrinterConnectionEvent({
+    required this.type,
+    this.printer,
+    this.id,
+    this.message,
+  });
+}
 
 /// Manages interactions with POS printers (both standard ESC/POS and label printers).
 ///
@@ -9,6 +26,9 @@ import 'package:pos_printers/src/pos_printers.pigeon.dart';
 /// and managing printers. Discovery results are provided via a stream.
 class PosPrintersManager implements PrinterDiscoveryEventsApi {
   static const String _logTag = 'PosPrintersManager';
+
+  // Текущий фильтр для поиска принтеров
+  PrinterDiscoveryFilter _discoveryFilter = PrinterDiscoveryFilter.all;
 
   // Implement the FlutterApi
   /// Internal instance of the Pigeon-generated API.
@@ -55,6 +75,14 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// Completer to signal the end of the discovery process (success or failure).
   Completer<void>? _discoveryCompleter;
 
+  final _connectionEventsController =
+      StreamController<PrinterConnectionEvent>.broadcast();
+  Stream<PrinterConnectionEvent> get connectionEvents =>
+      _connectionEventsController.stream;
+
+  // Словарь типов подключенных принтеров по идентификатору
+  final Map<String, PrinterType> _printerTypes = {};
+
   /// Initializes the manager and sets up the receiver for native callbacks.
   PosPrintersManager() {
     // Set up the handler for native calls to the FlutterApi
@@ -66,20 +94,45 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     _printerDiscoveryController?.close();
     _discoveryCompleter?.completeError(StateError(
         "Manager disposed during discovery")); // Signal error if ongoing
+    _connectionEventsController.close();
     PrinterDiscoveryEventsApi.setUp(null); // Detach the receiver
+  }
+
+  // Собираем уникальный id из параметров соединения
+  String _connectionId(PrinterConnectionParams params) {
+    if (params.usbParams != null) {
+      final u = params.usbParams!;
+      return 'usb:${u.vendorId}:${u.productId}:${u.usbSerialNumber ?? ''}';
+    } else if (params.networkParams != null) {
+      return 'net:${params.networkParams!.ipAddress}';
+    }
+    return 'unknown';
+  }
+
+  // Определяем, ESC/POS или ZPL (для остальных пока unknown)
+  Future<PrinterType> _detectPrinterType(PrinterConnectionParams params) async {
+    final status = await getPrinterStatus(params);
+    if (status.success) {
+      return PrinterType.escpos;
+    }
+    // если статус не получен — считаем ZPL (label)
+    return PrinterType.zpl;
   }
 
   // --- Native Callbacks Implementation (PrinterDiscoveryEventsApi) ---
 
   @override
   void onPrinterFound(DiscoveredPrinterDTO printer) {
-    if (!(_printerDiscoveryController?.isClosed ?? true)) {
-      _printerDiscoveryController!.add(printer);
-    } else {
-      developer.log(
-          "Warning: onPrinterFound called but discovery stream is closed or null.",
-          name: _logTag);
+    // Фильтруем по запрошенному типу (escpos, zpl, all)
+    if (_discoveryFilter == PrinterDiscoveryFilter.escpos &&
+        printer.printerType != PrinterType.escpos) {
+      return;
     }
+    if (_discoveryFilter == PrinterDiscoveryFilter.zpl &&
+        printer.printerType != PrinterType.zpl) {
+      return;
+    }
+    _printerDiscoveryController?.add(printer);
   }
 
   @override
@@ -106,50 +159,56 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     _discoveryCompleter = null;
   }
 
+  @override
+  void onPrinterAttached(DiscoveredPrinterDTO printer) {
+    developer.log('USB printer attached: ${printer.id}', name: _logTag);
+    _connectionEventsController.add(PrinterConnectionEvent(
+      type: PrinterConnectionEventType.attached,
+      printer: printer,
+      id: printer.id,
+      message: 'USB attached: ${printer.id}',
+    ));
+  }
+
+  @override
+  void onPrinterDetached(String id) {
+    developer.log('USB printer detached: $id', name: _logTag);
+    _connectionEventsController.add(PrinterConnectionEvent(
+      type: PrinterConnectionEventType.detached,
+      id: id,
+      message: 'USB detached: $id',
+    ));
+  }
+
   // --- Public API Methods ---
 
-  /// Starts scanning for available printers (USB and Network via SDK + TCP Scan).
-  ///
-  /// Returns a [Stream<DiscoveredPrinter>] that emits printers as they are found.
-  /// The stream will close when the discovery process is complete.
-  /// Listen to the stream's `onDone` or `onError` callbacks, or await the Future
-  /// returned by `stream.toList()` or similar methods to know when discovery finishes.
-  ///
-  /// You can also await the Future returned by [awaitDiscoveryComplete] to know when
-  /// the discovery process has fully completed (successfully or with an error).
-  Stream<DiscoveredPrinterDTO> findPrinters() {
-    // Prevent concurrent scans
+  /// Starts scanning for available printers (USB and Network).
+  /// Можно указать фильтр: escpos, zpl или all.
+  Stream<DiscoveredPrinterDTO> findPrinters({
+    PrinterDiscoveryFilter filter = PrinterDiscoveryFilter.all,
+  }) {
+    _discoveryFilter = filter;
     if (_printerDiscoveryController != null &&
         !_printerDiscoveryController!.isClosed) {
       throw StateError("Discovery is already in progress.");
     }
-
-    // Close previous controller just in case (should be null if completed properly)
     _printerDiscoveryController?.close();
     _printerDiscoveryController =
         StreamController<DiscoveredPrinterDTO>.broadcast();
     _discoveryCompleter = Completer<void>();
-
     try {
-      // Initiate the native scan (method returns void)
       _executeApiCall(
         'Printer discovery initiation',
-        () => _api.findPrinters(),
+        () => _api.findPrinters(filter),
       ).catchError((error) {
-        // Handle discovery initiation error
         _printerDiscoveryController?.addError(error);
         _printerDiscoveryController?.close();
         _discoveryCompleter?.completeError(error);
         _printerDiscoveryController = null;
         _discoveryCompleter = null;
       });
-
-      // Return the stream immediately. Results will come via callbacks.
       return _printerDiscoveryController!.stream;
     } catch (e) {
-      // This section will handle errors that could occur before _executeApiCall
-      developer.log("Unexpected error during discovery initiation: $e",
-          name: _logTag);
       _printerDiscoveryController?.addError(e);
       _printerDiscoveryController?.close();
       _discoveryCompleter?.completeError(e);
@@ -169,16 +228,29 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   }
 
   /// Connects to the specified printer using its connection parameters.
-  ///
-  /// Use the `id` and `type` from a [DiscoveredPrinter] to create
-  /// the appropriate [PrinterConnectionParams].
-  ///
-  /// Returns a [ConnectResult] indicating success or failure.
+  /// Сохранит тип принтера и эмитит событие с ним.
   Future<void> connectPrinter(PrinterConnectionParams printer) async {
-    return _executeApiCall<void>(
+    await _executeApiCall<void>(
       'Connect to printer',
       () => _api.connectPrinter(printer),
     );
+    final id = _connectionId(printer);
+    // Событие успешного подключения (немедленно)
+    _connectionEventsController.add(PrinterConnectionEvent(
+      type: PrinterConnectionEventType.attached,
+      id: id,
+      message: 'Connected to $id',
+    ));
+    // Определение типа в фоне
+    unawaited(() async {
+      final type = await _detectPrinterType(printer);
+      _printerTypes[id] = type;
+      _connectionEventsController.add(PrinterConnectionEvent(
+        type: PrinterConnectionEventType.attached,
+        id: id,
+        message: 'Detected printer type: ${type.toString().split('.').last}',
+      ));
+    }());
   }
 
   /// Disconnects from the specified printer.
@@ -194,11 +266,29 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// Returns a [StatusResult] containing the success status, error message (if any),
   /// and the status string itself.
   Future<StatusResult> getPrinterStatus(PrinterConnectionParams printer) async {
+    final id = _connectionId(printer);
+    final type = _printerTypes[id] ?? PrinterType.unknown;
+    if (type == PrinterType.zpl) {
+      // Для ZPL сразу вызываем ZPL статус
+      try {
+        final zpl = await _api.getZPLPrinterStatus(printer);
+        return StatusResult(
+          success: zpl.success,
+          status: 'ZPL code ${zpl.code}',
+          errorMessage: zpl.errorMessage,
+        );
+      } catch (e) {
+        return StatusResult(success: false, errorMessage: e.toString());
+      }
+    }
+    // ESC/POS или неизвестный тип по умолчанию
     return _executeApiCall<StatusResult>(
       'Get printer status',
       () => _api.getPrinterStatus(printer),
       defaultErrorResult: StatusResult(
-          success: false, errorMessage: 'Failed to get printer status'),
+        success: false,
+        errorMessage: 'Failed to get printer status',
+      ),
     );
   }
 
@@ -236,13 +326,14 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     );
   }
 
-  /// Sends raw ESC/POS commands to a standard receipt printer.
-  ///
-  /// [printer]: Connection parameters of the target printer.
-  /// [data]: The raw byte data (ESC/POS commands).
-  /// [width]: The printing width in dots (may be relevant for some printers/commands).
+  /// Sends raw ESC/POS commands к чековому принтеру.
   Future<void> printReceiptData(
       PrinterConnectionParams printer, Uint8List data, int width) async {
+    final id = _connectionId(printer);
+    final t = _printerTypes[id] ?? PrinterType.unknown;
+    if (t != PrinterType.escpos) {
+      throw Exception('Printer $id не поддерживает ESC/POS-печать, тип: $t');
+    }
     return _executeApiCall<void>(
       'Print receipt data',
       () => _api.printData(printer, data, width),
@@ -275,18 +366,18 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
 
   // --- Label Printer Specific Methods ---
 
-  /// Sends raw commands (CPCL, TSPL, or ZPL) to a label printer.
-  ///
-  /// [printer]: Connection parameters of the target printer.
-  /// [language]: The command language ([LabelPrinterLanguage]).
-  /// [labelCommands]: The raw byte data for the label.
-  /// [width]: The printing width in dots (may be relevant for some commands).
+  /// Sends raw commands (CPCL, TSPL, или ZPL) к принтеру.
   Future<void> printLabelData(
     PrinterConnectionParams printer,
     LabelPrinterLanguage language,
     Uint8List labelCommands,
     int width,
   ) async {
+    final id = _connectionId(printer);
+    final t = _printerTypes[id] ?? PrinterType.unknown;
+    if (t != PrinterType.zpl) {
+      throw Exception('Printer $id не поддерживает label-печать, тип: $t');
+    }
     return _executeApiCall<void>(
       'Print label data',
       () => _api.printLabelData(printer, language, labelCommands, width),
@@ -294,12 +385,6 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   }
 
   /// Prints HTML content rendered as a bitmap on a label printer.
-  ///
-  /// [printer]: Connection parameters of the target printer.
-  /// [language]: The command language ([LabelPrinterLanguage]) to use for printing the bitmap.
-  /// [html]: The HTML string to render.
-  /// [width]: The label width in dots.
-  /// [height]: The label height in dots.
   Future<void> printLabelHTML(
     PrinterConnectionParams printer,
     LabelPrinterLanguage language,
@@ -307,9 +392,28 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     int width,
     int height,
   ) async {
+    final id = _connectionId(printer);
+    final t = _printerTypes[id] ?? PrinterType.unknown;
+    if (t != PrinterType.zpl) {
+      throw Exception('Printer $id не поддерживает label-печать, тип: $t');
+    }
     return _executeApiCall<void>(
       'Print HTML label',
       () => _api.printLabelHTML(printer, language, html, width, height),
+    );
+  }
+
+  /// Получить статус ZPL‑принтера (коды 00–80)
+  Future<ZPLStatusResult> getZPLPrinterStatus(
+      PrinterConnectionParams printer) async {
+    return _executeApiCall<ZPLStatusResult>(
+      'Get ZPL printer status',
+      () => _api.getZPLPrinterStatus(printer),
+      defaultErrorResult: ZPLStatusResult(
+        success: false,
+        code: -1,
+        errorMessage: 'Failed to get ZPL status',
+      ),
     );
   }
 }

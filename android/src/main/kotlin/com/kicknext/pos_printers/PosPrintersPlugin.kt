@@ -1,6 +1,9 @@
 package com.kicknext.pos_printers
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
@@ -13,6 +16,7 @@ import com.kicknext.pos_printers.gen.*
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.suspendCancellableCoroutine
 import net.posprinter.*
 import net.posprinter.model.AlgorithmType
 import java.net.Inet4Address
@@ -36,6 +40,41 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
     private val connectionsMap = mutableMapOf<String, IDeviceConnection>()
 
+    // Фильтр для поиска принтеров, передается из Dart
+    private var discoveryFilter: PrinterDiscoveryFilter = PrinterDiscoveryFilter.ALL
+
+    // Single receiver for USB attach/detach events
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val action = intent.action ?: return
+            val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE) ?: return
+            // Filter only USB printers by interface class
+            val isPrinter = (0 until device.interfaceCount).any { device.getInterface(it).interfaceClass == 7 }
+            if (!isPrinter) return
+            // Obtain serial if available
+            val serial = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && usbManager.hasPermission(device)) {
+                try { device.serialNumber } catch (_: Exception) { null }
+            } else null
+            val dto = DiscoveredPrinterDTO(
+                id = "${device.vendorId}:${device.productId}:${serial ?: "null"}",
+                type = PosPrinterConnectionType.USB,
+                printerType = PrinterType.UNKNOWN,
+                usbParams = UsbParams(
+                    vendorId = device.vendorId.toLong(),
+                    productId = device.productId.toLong(),
+                    usbSerialNumber = serial,
+                    manufacturer = device.manufacturerName,
+                    productName = device.productName
+                ),
+                networkParams = null
+            )
+            when (action) {
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> discoveryEventsApi.onPrinterAttached(dto) {}
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> discoveryEventsApi.onPrinterDetached(dto.id) {}
+            }
+        }
+    }
+
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         Log.d("POSPrinters", "onAttachedToEngine called")
         applicationContext = flutterPluginBinding.applicationContext
@@ -44,6 +83,13 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
         POSConnect.init(this.applicationContext) // Use applicationContext
         Log.d("POSPrinters", "POSConnect initialized")
+
+        // Register USB attach/detach receiver
+        val filter = IntentFilter().apply {
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+        applicationContext.registerReceiver(usbReceiver, filter)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -53,6 +99,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         connectionsMap.values.forEach { it.close() }
         connectionsMap.clear()
         Log.d("POSPrinters", "Plugin detached, connections closed, coroutine scope cancelled.")
+
+        // Unregister USB receiver
+        applicationContext.unregisterReceiver(usbReceiver)
     }
 
     private val networkDispatcher = Dispatchers.IO
@@ -73,22 +122,89 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         block(connection)
     }
 
-    override fun findPrinters() {
-        Log.d("POSPrinters", "findPrinters (streaming) called")
+    // Detect printer type by probing ESC/POS then ZPL
+    private suspend fun detectType(raw: DiscoveredPrinterDTO): PrinterType = suspendCancellableCoroutine { cont ->
+        // Build connection
+        val connection: IDeviceConnection
+        val target: String
+        try {
+            when (raw.type) {
+                PosPrinterConnectionType.USB -> {
+                    // Find USB device
+                    val usb = findUsbDevice(raw.usbParams!!.vendorId.toInt(), raw.usbParams.productId.toInt(), raw.usbParams.usbSerialNumber)
+                    if (usb == null) throw Exception("USB device not found")
+                    connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
+                    target = usb.deviceName
+                }
+                PosPrinterConnectionType.NETWORK -> {
+                    connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
+                    target = raw.networkParams!!.ipAddress
+                }
+            }
+        } catch (e: Exception) {
+            cont.resume(PrinterType.UNKNOWN)
+            return@suspendCancellableCoroutine
+        }
+        // connect listener
+        val listener = IConnectListener { code, _, _ ->
+            if (code == POSConnect.CONNECT_SUCCESS) {
+                // probe ESC/POS
+                try {
+                    val pos = POSPrinter(connection)
+                    pos.initializePrinter()
+                    pos.printerStatus { status ->
+                        if (status >= POSConst.STS_NORMAL) {
+                            connection.close()
+                            cont.resume(PrinterType.ESCPOS)
+                        } else {
+                            // probe ZPL
+                            val zpl = ZPLPrinter(connection)
+                            zpl.printerStatus { zcode ->
+                                val type = if (zcode in 0..0x80) PrinterType.ZPL else PrinterType.UNKNOWN
+                                connection.close()
+                                cont.resume(type)
+                            }
+                        }
+                    }
+                } catch (ex: Exception) {
+                    connection.close()
+                    cont.resume(PrinterType.UNKNOWN)
+                }
+            } else {
+                // could not connect
+                cont.resume(PrinterType.UNKNOWN)
+            }
+        }
+        // initiate connect
+        connection.connect(target, listener)
+    }
+
+    override fun findPrinters(filter: PrinterDiscoveryFilter) {
+        discoveryFilter = filter
+        Log.d("POSPrinters", "findPrinters (streaming) called with filter=$filter")
         pluginScope.launch {
             val foundPrinterIds = mutableSetOf<String>()
             var overallSuccess = true
             var firstError: Throwable? = null
 
-            suspend fun sendPrinterFound(printer: DiscoveredPrinterDTO) {
-                if (foundPrinterIds.add(printer.id)) {
-                    withContext(Dispatchers.Main) {
-                        try {
-                            discoveryEventsApi.onPrinterFound(printer) {}
-                            Log.d("POSPrinters", "Sent printer to Dart: ${printer.id}")
-                        } catch (e: Exception) {
-                            Log.e("POSPrinters", "Error sending printer ${printer.id} to Dart: ${e.message}", e)
-                        }
+            suspend fun sendPrinterFound(raw: DiscoveredPrinterDTO) {
+                val type = detectType(raw)
+                // apply filter
+                if (discoveryFilter != PrinterDiscoveryFilter.ALL &&
+                    (type == PrinterType.ESCPOS && discoveryFilter != PrinterDiscoveryFilter.ESCPOS ||
+                     type == PrinterType.ZPL && discoveryFilter != PrinterDiscoveryFilter.ZPL)) {
+                    return
+                }
+                val dto = DiscoveredPrinterDTO(
+                    id = raw.id, type = raw.type, printerType = type,
+                    usbParams = raw.usbParams, networkParams = raw.networkParams
+                )
+                withContext(Dispatchers.Main) {
+                    try {
+                        discoveryEventsApi.onPrinterFound(dto) {}
+                        Log.d("POSPrinters", "Sent printer to Dart: ${dto.id}")
+                    } catch (e: Exception) {
+                        Log.e("POSPrinters", "Error sending printer ${dto.id} to Dart: ${e.message}", e)
                     }
                 }
             }
@@ -202,8 +318,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     // Add printer even if serial couldn't be read
                     discovered.add(
                         DiscoveredPrinterDTO(
-                            id = "${device.vendorId}:${device.productId}:${device.serialNumber}", // Use deviceName as unique ID for USB
+                            id = "${device.vendorId}:${device.productId}:${device.serialNumber}",
                             type = PosPrinterConnectionType.USB,
+                            printerType = PrinterType.UNKNOWN,
                             usbParams = UsbParams(
                                 vendorId = device.vendorId.toLong(),
                                 productId = device.productId.toLong(),
@@ -258,8 +375,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                         val printer = DiscoveredPrinterDTO(
                             id = ip,
                             type = PosPrinterConnectionType.NETWORK,
-
-
+                            printerType = PrinterType.UNKNOWN,
                             usbParams = null,
                             networkParams = NetworkParams(
                                 ipAddress = ip,
@@ -345,6 +461,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                                             DiscoveredPrinterDTO(
                                                 id = ip,
                                                 type = PosPrinterConnectionType.NETWORK,
+                                                printerType = PrinterType.UNKNOWN,
                                                 usbParams = null,
                                                 networkParams = NetworkParams(
                                                     ipAddress = ip,
@@ -479,7 +596,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
     // Extension function to await CompletableFuture in coroutines
     private suspend fun <T> CompletableFuture<T>.await(): T =
-        suspendCoroutine { cont ->
+        suspendCoroutine<T> { cont ->
             whenComplete { result, exception ->
                 if (exception == null) {
                     cont.resume(result)
@@ -1090,6 +1207,33 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             } catch (e: Throwable) {
                 Log.e("POSPrinters", "Exception during printLabelHTML: ${e.message}", e)
                 callback(Result.failure(Exception("Print label HTML exception: ${e.message}")))
+            }
+        }
+    }
+
+    // Получить статус ZPL‑принтера (коды 00–80)
+    override fun getZPLPrinterStatus(
+        printer: PrinterConnectionParams,
+        callback: (Result<ZPLStatusResult>) -> Unit
+    ) {
+        withConnectionOrError(
+            printer,
+            "No active connection found for key=${getConnectionKey(printer)}",
+            callback
+        ) { connection ->
+            try {
+                val zpl = ZPLPrinter(connection)
+                zpl.printerStatus { code ->
+                    val success = code in 0..0x80
+                    val result = if (success) {
+                        ZPLStatusResult(true, code.toLong(), null)
+                    } else {
+                        ZPLStatusResult(false, code.toLong(), "ZPL status code $code")
+                    }
+                    callback(Result.success(result))
+                }
+            } catch (e: Throwable) {
+                callback(Result.failure(Exception("Get ZPL status exception: ${e.message}")))
             }
         }
     }

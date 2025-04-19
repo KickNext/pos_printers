@@ -37,6 +37,20 @@ enum LabelPrinterLanguage {
   zpl,
 }
 
+/// Фильтр для поиска принтеров по протоколу
+enum PrinterDiscoveryFilter {
+  escpos,
+  zpl,
+  all,
+}
+
+/// Тип принтера для определения протокола печати
+enum PrinterType {
+  escpos,
+  zpl,
+  unknown,
+}
+
 class PrinterConnectionParams {
   PrinterConnectionParams({
     required this.connectionType,
@@ -186,6 +200,38 @@ class NetSettingsDTO {
   }
 }
 
+/// Результат статуса ZPL‑принтера
+class ZPLStatusResult {
+  ZPLStatusResult({
+    required this.success,
+    required this.code,
+    this.errorMessage,
+  });
+
+  bool success;
+
+  int code;
+
+  String? errorMessage;
+
+  Object encode() {
+    return <Object?>[
+      success,
+      code,
+      errorMessage,
+    ];
+  }
+
+  static ZPLStatusResult decode(Object result) {
+    result as List<Object?>;
+    return ZPLStatusResult(
+      success: result[0]! as bool,
+      code: result[1]! as int,
+      errorMessage: result[2] as String?,
+    );
+  }
+}
+
 /// DTO с расширенной информацией о принтере
 /// Result for getting printer status.
 class StatusResult {
@@ -254,6 +300,7 @@ class DiscoveredPrinterDTO {
   DiscoveredPrinterDTO({
     required this.id,
     required this.type,
+    required this.printerType,
     this.usbParams,
     this.networkParams,
   });
@@ -261,6 +308,8 @@ class DiscoveredPrinterDTO {
   String id;
 
   PosPrinterConnectionType type;
+
+  PrinterType printerType;
 
   UsbParams? usbParams;
 
@@ -270,6 +319,7 @@ class DiscoveredPrinterDTO {
     return <Object?>[
       id,
       type,
+      printerType,
       usbParams,
       networkParams,
     ];
@@ -280,8 +330,9 @@ class DiscoveredPrinterDTO {
     return DiscoveredPrinterDTO(
       id: result[0]! as String,
       type: result[1]! as PosPrinterConnectionType,
-      usbParams: result[2] as UsbParams?,
-      networkParams: result[3] as NetworkParams?,
+      printerType: result[2]! as PrinterType,
+      usbParams: result[3] as UsbParams?,
+      networkParams: result[4] as NetworkParams?,
     );
   }
 }
@@ -300,26 +351,35 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is LabelPrinterLanguage) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    }    else if (value is PrinterConnectionParams) {
+    }    else if (value is PrinterDiscoveryFilter) {
       buffer.putUint8(131);
-      writeValue(buffer, value.encode());
-    }    else if (value is UsbParams) {
+      writeValue(buffer, value.index);
+    }    else if (value is PrinterType) {
       buffer.putUint8(132);
-      writeValue(buffer, value.encode());
-    }    else if (value is NetworkParams) {
+      writeValue(buffer, value.index);
+    }    else if (value is PrinterConnectionParams) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is NetSettingsDTO) {
+    }    else if (value is UsbParams) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is StatusResult) {
+    }    else if (value is NetworkParams) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is StringResult) {
+    }    else if (value is NetSettingsDTO) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is DiscoveredPrinterDTO) {
+    }    else if (value is ZPLStatusResult) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is StatusResult) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    }    else if (value is StringResult) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    }    else if (value is DiscoveredPrinterDTO) {
+      buffer.putUint8(140);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -336,18 +396,26 @@ class _PigeonCodec extends StandardMessageCodec {
         final int? value = readValue(buffer) as int?;
         return value == null ? null : LabelPrinterLanguage.values[value];
       case 131: 
-        return PrinterConnectionParams.decode(readValue(buffer)!);
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : PrinterDiscoveryFilter.values[value];
       case 132: 
-        return UsbParams.decode(readValue(buffer)!);
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : PrinterType.values[value];
       case 133: 
-        return NetworkParams.decode(readValue(buffer)!);
+        return PrinterConnectionParams.decode(readValue(buffer)!);
       case 134: 
-        return NetSettingsDTO.decode(readValue(buffer)!);
+        return UsbParams.decode(readValue(buffer)!);
       case 135: 
-        return StatusResult.decode(readValue(buffer)!);
+        return NetworkParams.decode(readValue(buffer)!);
       case 136: 
-        return StringResult.decode(readValue(buffer)!);
+        return NetSettingsDTO.decode(readValue(buffer)!);
       case 137: 
+        return ZPLStatusResult.decode(readValue(buffer)!);
+      case 138: 
+        return StatusResult.decode(readValue(buffer)!);
+      case 139: 
+        return StringResult.decode(readValue(buffer)!);
+      case 140: 
         return DiscoveredPrinterDTO.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -369,19 +437,8 @@ class POSPrintersApi {
   final String pigeonVar_messageChannelSuffix;
 
   /// Инициирует асинхронный поиск принтеров (USB, SDK Net, TCP Net).
-  /// Найденные принтеры (`DiscoveredPrinter`) будут отправляться через `PrinterDiscoveryEventsApi.onPrinterFound`.
-  /// По завершении поиска будет вызван `PrinterDiscoveryEventsApi.onDiscoveryComplete`.
-  ///
-  /// Жизненный цикл:
-  /// 1. Вызвать `findPrinters()`.
-  /// 2. Получать `DiscoveredPrinter` через `onPrinterFound`.
-  /// 3. Пользователь выбирает принтер из списка найденных.
-  /// 4. Создать `PrinterConnectionParams`, используя *стабильные* идентификаторы из `DiscoveredPrinter`
-  ///    (VID/PID/Serial для USB; IP для Network).
-  /// 5. Вызвать `connectPrinter()` с созданными параметрами.
-  /// 6. Выполнять операции (печать и т.д.).
-  /// 7. Вызвать `disconnectPrinter()`.
-  Future<void> findPrinters() async {
+  /// [filter] — фильтр типов принтеров (escpos, zpl, all)
+  Future<void> findPrinters(PrinterDiscoveryFilter filter) async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.findPrinters$pigeonVar_messageChannelSuffix';
     final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -389,7 +446,7 @@ class POSPrintersApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(null) as List<Object?>?;
+        await pigeonVar_channel.send(<Object?>[filter]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -660,6 +717,34 @@ class POSPrintersApi {
       return;
     }
   }
+
+  /// Получить статус ZPL‑принтера (коды 00–80)
+  Future<ZPLStatusResult> getZPLPrinterStatus(PrinterConnectionParams printer) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getZPLPrinterStatus$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[printer]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as ZPLStatusResult?)!;
+    }
+  }
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.
@@ -676,6 +761,10 @@ abstract class PrinterDiscoveryEventsApi {
   /// `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).
   /// `errorMessage` содержит сообщение об ошибке, если `success` = false.
   void onDiscoveryComplete(bool success, String? errorMessage);
+
+  void onPrinterAttached(DiscoveredPrinterDTO printer);
+
+  void onPrinterDetached(String id);
 
   static void setUp(PrinterDiscoveryEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -721,6 +810,56 @@ abstract class PrinterDiscoveryEventsApi {
           final String? arg_errorMessage = (args[1] as String?);
           try {
             api.onDiscoveryComplete(arg_success!, arg_errorMessage);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final DiscoveredPrinterDTO? arg_printer = (args[0] as DiscoveredPrinterDTO?);
+          assert(arg_printer != null,
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached was null, expected non-null DiscoveredPrinterDTO.');
+          try {
+            api.onPrinterAttached(arg_printer!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_id = (args[0] as String?);
+          assert(arg_id != null,
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached was null, expected non-null String.');
+          try {
+            api.onPrinterDetached(arg_id!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

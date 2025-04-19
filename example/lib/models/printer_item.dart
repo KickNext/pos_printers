@@ -1,30 +1,30 @@
 import 'package:pos_printers/pos_printers.dart';
 
-/// Модель для хранения информации о принтере в пользовательском интерфейсе.
+/// Model for storing printer information in the UI.
 class PrinterItem {
-  /// Оригинальный объект обнаруженного принтера
+  /// Original discovered printer object
   final DiscoveredPrinterDTO discoveredPrinter;
 
-  /// Параметры подключения к принтеру
+  /// Connection parameters for the printer
   late final PrinterConnectionParams connectionParams;
 
-  /// Флаг, указывающий, является ли это принтером этикеток
-  final bool isLabelPrinter;
+  /// Connection status (true = connected, false = disconnected)
+  bool isConnected;
 
-  /// Язык для принтера этикеток (CPCL, TSPL, ZPL)
-  LabelPrinterLanguage? language;
+  /// Whether the printer is saved (shown in "connected")
+  final bool isSaved;
 
-  /// Создаёт объект [PrinterItem] на основе обнаруженного принтера.
+  /// Creates a [PrinterItem] from a discovered printer.
   ///
-  /// [discoveredPrinter] - найденный принтер из поиска
-  /// [language] - опциональный язык для принтера этикеток
-  /// [isLabelPrinter] - флаг, определяющий тип принтера (по умолчанию обычный ESC/POS)
+  /// [discoveredPrinter] - discovered printer from search
+  /// [isConnected] - connection status (default: true)
+  /// [isSaved] - whether the printer is saved (default: false)
   PrinterItem({
     required this.discoveredPrinter,
-    this.language,
-    this.isLabelPrinter = false,
+    this.isConnected = true,
+    this.isSaved = false,
   }) {
-    // Инициализация параметров подключения на основе обнаруженного принтера
+    // Initialize connection parameters based on discovered printer
     if (discoveredPrinter.type == PosPrinterConnectionType.usb) {
       connectionParams = PrinterConnectionParams(
         connectionType: PosPrinterConnectionType.usb,

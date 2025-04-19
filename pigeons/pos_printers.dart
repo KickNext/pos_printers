@@ -23,6 +23,12 @@ enum LabelPrinterLanguage {
   zpl,
 }
 
+/// Фильтр для поиска принтеров по протоколу
+enum PrinterDiscoveryFilter { escpos, zpl, all }
+
+/// Тип принтера для определения протокола печати
+enum PrinterType { escpos, zpl, unknown }
+
 class PrinterConnectionParams {
   final PosPrinterConnectionType connectionType;
   final UsbParams? usbParams;
@@ -81,6 +87,16 @@ class NetSettingsDTO {
   });
 }
 
+/// Результат статуса ZPL‑принтера
+class ZPLStatusResult {
+  final bool success;
+  final int code;
+  final String? errorMessage;
+
+  ZPLStatusResult(
+      {required this.success, required this.code, this.errorMessage});
+}
+
 /// DTO с расширенной информацией о принтере
 // class PrinterDetailsDTO {
 //   final String? serialNumber;
@@ -116,12 +132,14 @@ class StringResult {
 class DiscoveredPrinterDTO {
   final String id;
   final PosPrinterConnectionType type;
+  final PrinterType printerType;
   final UsbParams? usbParams;
   final NetworkParams? networkParams;
 
   DiscoveredPrinterDTO({
     required this.id,
     required this.type,
+    required this.printerType,
     this.usbParams,
     this.networkParams,
   });
@@ -130,19 +148,8 @@ class DiscoveredPrinterDTO {
 @HostApi()
 abstract class POSPrintersApi {
   /// Инициирует асинхронный поиск принтеров (USB, SDK Net, TCP Net).
-  /// Найденные принтеры (`DiscoveredPrinter`) будут отправляться через `PrinterDiscoveryEventsApi.onPrinterFound`.
-  /// По завершении поиска будет вызван `PrinterDiscoveryEventsApi.onDiscoveryComplete`.
-  ///
-  /// Жизненный цикл:
-  /// 1. Вызвать `findPrinters()`.
-  /// 2. Получать `DiscoveredPrinter` через `onPrinterFound`.
-  /// 3. Пользователь выбирает принтер из списка найденных.
-  /// 4. Создать `PrinterConnectionParams`, используя *стабильные* идентификаторы из `DiscoveredPrinter`
-  ///    (VID/PID/Serial для USB; IP для Network).
-  /// 5. Вызвать `connectPrinter()` с созданными параметрами.
-  /// 6. Выполнять операции (печать и т.д.).
-  /// 7. Вызвать `disconnectPrinter()`.
-  void findPrinters();
+  /// [filter] — фильтр типов принтеров (escpos, zpl, all)
+  void findPrinters(PrinterDiscoveryFilter filter);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
@@ -207,6 +214,11 @@ abstract class POSPrintersApi {
     int width,
     int height,
   );
+
+  /// Получить статус ZPL‑принтера (коды 00–80)
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  ZPLStatusResult getZPLPrinterStatus(PrinterConnectionParams printer);
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.
@@ -222,4 +234,6 @@ abstract class PrinterDiscoveryEventsApi {
   /// `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).
   /// `errorMessage` содержит сообщение об ошибке, если `success` = false.
   void onDiscoveryComplete(bool success, String? errorMessage);
+  void onPrinterAttached(DiscoveredPrinterDTO printer);
+  void onPrinterDetached(String id);
 }

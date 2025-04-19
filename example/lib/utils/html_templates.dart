@@ -1,4 +1,4 @@
-/// Генерирует простой HTML для ценника (пример)
+/// Generates a simple HTML for a price tag (example)
 String generatePriceTagHtml({
   required String itemName,
   required String price,

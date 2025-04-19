@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pos_printers/pos_printers.dart';
 import '../models/printer_item.dart';
-import 'printer_list_tile.dart'; // Import the common tile
+import 'printer_list_tile.dart';
 
 /// Displays the list of found (discovered) printers.
 class FoundPrintersSection extends StatelessWidget {
@@ -28,24 +28,23 @@ class FoundPrintersSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(8.0),
           child: Text(
-              isSearching ? 'Searching...' : 'Found Printers (${foundPrinters.length})',
+              isSearching
+                  ? 'Searching...'
+                  : 'Found Printers (${foundPrinters.length})',
               style: Theme.of(context).textTheme.titleMedium),
         ),
         Expanded(
           child: foundPrinters.isEmpty && !isSearching
-              ? const Center(child: Text('No printers found. Tap search button.'))
+              ? const Center(
+                  child: Text('No printers found. Tap search button.'))
               : ListView.builder(
                   itemCount: foundPrinters.length,
                   itemBuilder: (context, index) {
                     final item = foundPrinters[index];
-                    return PrinterListTile(
+                    return FoundPrinterTile(
                       item: item,
-                      isConnected: false,
-                      onConnect: onConnect,
-                      onDisconnect: (_) {}, // Not applicable
-                      onGetStatus: (_) {}, // Not applicable
-                      onSetNetworkSettings: (_) {}, // Not applicable
-                      onConfigureUdp: onConfigureUdp,
+                      onAdd: () => onConnect(item),
+                      onConfigureUdp: () => onConfigureUdp(item),
                       onLanguageSelected: onLanguageSelected,
                     );
                   },

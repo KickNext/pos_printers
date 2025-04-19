@@ -1,6 +1,6 @@
 name: pos_printers
-description: "A new Flutter plugin project."
-version: 0.2.1+2025041601
+description: "Flutter plugin for Android POS printers"
+version: 0.3.1+2025041901
 # homepage:
 
 environment:

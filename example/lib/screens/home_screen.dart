@@ -8,7 +8,7 @@ import '../utils/snackbar_helper.dart';
 import '../widgets/network_settings_dialog.dart';
 import '../widgets/printer_list_tile.dart';
 
-/// Главный экран приложения, отображающий списки принтеров и функции работы с ними
+/// Main screen displaying printer lists and actions
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -17,46 +17,93 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  /// Сервис для работы с принтерами
+  /// Printer service
   final PrinterService _printerService = PrinterService();
 
-  /// Глобальный ключ для ScaffoldMessenger
+  /// Global key for ScaffoldMessenger
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
 
-  /// Вспомогательный класс для работы со снэкбарами
+  /// Helper for snackbars
   late final SnackBarHelper _snackBarHelper;
 
-  /// Список найденных принтеров
+  /// List of saved (connected) printers
+  final List<PrinterItem> _savedPrinters = [
+    // Example: can be loaded from settings/DB, currently empty
+    // PrinterItem(discoveredPrinter: ... , isSaved: true),
+  ];
+
+  /// List of found (not saved) printers
   final List<PrinterItem> _foundPrinters = [];
 
-  /// Список подключённых принтеров
-  final List<PrinterItem> _connectedPrinters = [];
+  /// List of connected printers (only saved)
+  List<PrinterItem> get _connectedPrinters => _savedPrinters;
+
+  /// Scroll controllers for lists
+  final ScrollController _connectedScrollController = ScrollController();
+  final ScrollController _foundScrollController = ScrollController();
 
   bool _isSearching = false;
   StreamSubscription<DiscoveredPrinterDTO>? _searchSubscription;
+  StreamSubscription<PrinterConnectionEvent>? _connectionEventsSub;
 
   @override
   void initState() {
     super.initState();
     _snackBarHelper = SnackBarHelper(_scaffoldMessengerKey);
+    // Subscribe to USB attach/detach events
+    _connectionEventsSub = _printerService.connectionEvents.listen((event) {
+      if (!mounted) return;
+      final savedIdx =
+          _savedPrinters.indexWhere((p) => p.discoveredPrinter.id == event.id);
+      final foundIdx =
+          _foundPrinters.indexWhere((p) => p.discoveredPrinter.id == event.id);
+      if (event.type == PrinterConnectionEventType.attached) {
+        _snackBarHelper.showInfoSnackbar('USB printer attached: ${event.id}');
+        if (savedIdx != -1) {
+          setState(() {
+            _savedPrinters[savedIdx].isConnected = true;
+          });
+        } else if (foundIdx == -1 && event.printer != null) {
+          setState(() {
+            _foundPrinters.add(PrinterItem(
+                discoveredPrinter: event.printer!,
+                isConnected: true,
+                isSaved: false));
+          });
+        }
+      } else if (event.type == PrinterConnectionEventType.detached) {
+        _snackBarHelper.showInfoSnackbar('USB printer detached: ${event.id}');
+        if (savedIdx != -1) {
+          setState(() {
+            _savedPrinters[savedIdx].isConnected = false;
+          });
+        } else if (foundIdx != -1) {
+          setState(() {
+            _foundPrinters.removeAt(foundIdx);
+          });
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
     _searchSubscription?.cancel();
+    _connectionEventsSub?.cancel();
+    _connectedScrollController.dispose();
+    _foundScrollController.dispose();
     _printerService.dispose();
     super.dispose();
   }
 
-  /// Запуск поиска принтеров
+  /// Start searching for printers
   Future<void> _findPrinters() async {
     if (_isSearching) return;
 
     setState(() {
       _isSearching = true;
       _foundPrinters.clear();
-      _connectedPrinters.clear();
     });
 
     _searchSubscription?.cancel();
@@ -106,18 +153,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Подключение к принтеру
+  /// Connect to a printer
   Future<void> _connectToPrinter(PrinterItem item) async {
     try {
       await _printerService.connectToPrinter(item);
       if (mounted) {
-        final alreadyIn = _connectedPrinters.any((p) => _printerService
-            .samePrinter(p.discoveredPrinter, item.discoveredPrinter));
+        final alreadyIn = _savedPrinters.any((p) => _printerService.samePrinter(
+            p.discoveredPrinter, item.discoveredPrinter));
         if (!alreadyIn) {
           setState(() {
             _foundPrinters.removeWhere((p) => _printerService.samePrinter(
                 p.discoveredPrinter, item.discoveredPrinter));
-            _connectedPrinters.add(item);
+            _savedPrinters.add(item);
           });
           _snackBarHelper.showSuccessSnackbar('Connected successfully!');
         }
@@ -127,13 +174,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Отключение от принтера
+  /// Disconnect from a printer
   Future<void> _disconnectPrinter(PrinterItem item) async {
     try {
       await _printerService.disconnectPrinter(item);
       if (mounted) {
         setState(() {
-          _connectedPrinters.removeWhere((p) => _printerService.samePrinter(
+          _savedPrinters.removeWhere((p) => _printerService.samePrinter(
               p.discoveredPrinter, item.discoveredPrinter));
         });
         _snackBarHelper.showInfoSnackbar('Disconnected.');
@@ -143,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Запрос статуса принтера
+  /// Get printer status
   Future<void> _getStatus(PrinterItem item) async {
     try {
       final result = await _printerService.getPrinterStatus(item);
@@ -162,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Печать HTML на ESC/POS принтере
+  /// Print HTML on ESC/POS printer
   Future<void> _printEscHtml(PrinterItem item) async {
     try {
       await _printerService.printEscHtml(item);
@@ -172,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Печать сырых ESC/POS команд
+  /// Print raw ESC/POS commands
   Future<void> _printEscPosData(PrinterItem item) async {
     try {
       await _printerService.printEscPosData(item);
@@ -184,33 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Печать лейбла сырыми командами
-  Future<void> _printLabelRaw(PrinterItem item) async {
-    try {
-      await _printerService.printLabelRaw(item);
-      if (mounted) {
-        _snackBarHelper
-            .showSuccessSnackbar('${item.language!.name} Raw data sent.');
-      }
-    } catch (e) {
-      _snackBarHelper.showErrorSnackbar('printLabelData error: $e');
-    }
-  }
-
-  /// Печать HTML на лейбл-принтер
-  Future<void> _printLabelHtml(PrinterItem item) async {
-    try {
-      await _printerService.printLabelHtml(item);
-      if (mounted) {
-        _snackBarHelper
-            .showSuccessSnackbar('${item.language!.name} HTML sent.');
-      }
-    } catch (e) {
-      _snackBarHelper.showErrorSnackbar('printLabelHTML error: $e');
-    }
-  }
-
-  /// Настройка сетевых параметров через активное соединение
+  /// Set network settings via active connection
   Future<void> _setNetSettingsViaConnection(
       PrinterItem item, NetSettingsDTO settings) async {
     _snackBarHelper
@@ -226,7 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Настройка сетевых параметров через UDP broadcast
+  /// Configure network settings via UDP broadcast
   Future<void> _configureNetViaUDP(
       PrinterItem item, NetSettingsDTO settings) async {
     final mac = item.discoveredPrinter.networkParams?.macAddress;
@@ -249,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Отображение диалога настройки сетевых параметров
+  /// Show network settings dialog
   Future<void> _showNetworkSettingsDialog(
       {required PrinterItem item, required bool isUdp}) async {
     // Pre-fill with current printer IP if connected and setting via connection
@@ -297,41 +318,41 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Обработка выбора языка из PrinterListTile
-  void _handleLanguageSelected(PrinterItem item, LabelPrinterLanguage? lang) {
-    setState(() {
-      item.language = lang;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width > 900;
     return ScaffoldMessenger(
       key: _scaffoldMessengerKey,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('POS Printers Example'),
           actions: [
-            // Кнопка для пакетной печати на всех подключенных
             if (_connectedPrinters.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.print_outlined),
                 tooltip: 'Print test on all connected',
                 onPressed: () async {
                   for (final p in _connectedPrinters) {
-                    if (p.isLabelPrinter) {
-                      if (p.language != null) {
-                        await _printLabelHtml(p);
+                    if (p.discoveredPrinter.printerType == PrinterType.zpl) {
+                      // ZPL label printer
+                      try {
+                        await _printerService.printLabelHtml(p);
                         await Future.delayed(const Duration(milliseconds: 500));
-                        await _printLabelRaw(p);
-                      } else {
-                        _snackBarHelper.showErrorSnackbar(
-                            'Select language for ${p.discoveredPrinter.id}');
+                        await _printerService.printLabelRaw(p);
+                      } catch (e) {
+                        _snackBarHelper
+                            .showErrorSnackbar('Label print error: $e');
                       }
                     } else {
-                      await _printEscHtml(p);
-                      await Future.delayed(const Duration(milliseconds: 500));
-                      await _printEscPosData(p);
+                      // ESC/POS receipt printer
+                      try {
+                        await _printEscHtml(p);
+                        await Future.delayed(const Duration(milliseconds: 500));
+                        await _printEscPosData(p);
+                      } catch (e) {
+                        _snackBarHelper
+                            .showErrorSnackbar('ESC/POS print error: $e');
+                      }
                     }
                   }
                   if (mounted) {
@@ -339,84 +360,200 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
               ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Find Printers',
+              onPressed: _isSearching ? null : _findPrinters,
+            ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _isSearching ? null : _findPrinters,
-          tooltip: 'Find Printers',
-          child: _isSearching
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 3))
-              : const Icon(Icons.search),
-        ),
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // --- Секция "Подключённые принтеры" ---
-            if (_connectedPrinters.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text('Connected Printers (${_connectedPrinters.length})',
-                    style: Theme.of(context).textTheme.titleMedium),
+        floatingActionButton: isWide
+            ? null
+            : FloatingActionButton(
+                onPressed: _isSearching ? null : _findPrinters,
+                tooltip: 'Find Printers',
+                child: _isSearching
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 3))
+                    : const Icon(Icons.search),
               ),
-            if (_connectedPrinters.isNotEmpty)
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _connectedPrinters.length,
-                itemBuilder: (context, index) {
-                  final item = _connectedPrinters[index];
-                  return PrinterListTile(
-                    item: item,
-                    isConnected: true,
-                    onConnect: (_) {}, // Already connected
-                    onDisconnect: _disconnectPrinter,
-                    onGetStatus: _getStatus,
-                    onSetNetworkSettings: (item) =>
-                        _showNetworkSettingsDialog(item: item, isUdp: false),
-                    onConfigureUdp: (_) {}, // Not applicable for connected
-                    onLanguageSelected: _handleLanguageSelected,
-                  );
-                },
-              ),
-            if (_connectedPrinters.isNotEmpty)
-              const Divider(height: 20, thickness: 1),
-
-            // --- Секция "Найденные принтеры" ---
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                  _isSearching
-                      ? 'Searching...'
-                      : 'Found Printers (${_foundPrinters.length})',
-                  style: Theme.of(context).textTheme.titleMedium),
-            ),
-            Expanded(
-              child: _foundPrinters.isEmpty && !_isSearching
-                  ? const Center(
-                      child: Text('No printers found. Tap search button.'))
-                  : ListView.builder(
-                      itemCount: _foundPrinters.length,
-                      itemBuilder: (context, index) {
-                        final item = _foundPrinters[index];
-                        return PrinterListTile(
-                          item: item,
-                          isConnected: false,
-                          onConnect: _connectToPrinter,
-                          onDisconnect: (_) {}, // Not connected
-                          onGetStatus: (_) {}, // Not connected
-                          onSetNetworkSettings: (_) {}, // Not connected
-                          onConfigureUdp: (item) => _showNetworkSettingsDialog(
-                              item: item, isUdp: true),
-                          onLanguageSelected: _handleLanguageSelected,
-                        );
-                      },
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            if (isWide) {
+              return Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: Card(
+                      margin: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Text(
+                              'Saved Printers (${_connectedPrinters.length})',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          Expanded(
+                            child: _connectedPrinters.isEmpty
+                                ? const Center(child: Text('No saved printers'))
+                                : Scrollbar(
+                                    controller: _connectedScrollController,
+                                    thumbVisibility: true,
+                                    child: ListView.builder(
+                                      controller: _connectedScrollController,
+                                      itemCount: _connectedPrinters.length,
+                                      itemBuilder: (context, index) {
+                                        final item = _connectedPrinters[index];
+                                        return SavedPrinterTile(
+                                          item: item,
+                                          onDisconnect: () =>
+                                              _disconnectPrinter(item),
+                                          onGetStatus: () => _getStatus(item),
+                                          onSetNetworkSettings: () =>
+                                              _showNetworkSettingsDialog(
+                                                  item: item, isUdp: false),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
-            ),
-          ],
+                  ),
+                  VerticalDivider(width: 1, thickness: 1),
+                  Expanded(
+                    flex: 1,
+                    child: Card(
+                      margin: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Text(
+                              _isSearching
+                                  ? 'Searching for printers...'
+                                  : 'Found Printers (${_foundPrinters.length})',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          Expanded(
+                            child: _foundPrinters.isEmpty && !_isSearching
+                                ? const Center(
+                                    child: Text('No printers found.'))
+                                : Scrollbar(
+                                    controller: _foundScrollController,
+                                    thumbVisibility: true,
+                                    child: ListView.builder(
+                                      controller: _foundScrollController,
+                                      itemCount: _foundPrinters.length,
+                                      itemBuilder: (context, index) {
+                                        final item = _foundPrinters[index];
+                                        return FoundPrinterTile(
+                                          item: item,
+                                          onAdd: () => _connectToPrinter(item),
+                                          onConfigureUdp: item
+                                                      .discoveredPrinter.type ==
+                                                  PosPrinterConnectionType
+                                                      .network
+                                              ? () =>
+                                                  _showNetworkSettingsDialog(
+                                                      item: item, isUdp: true)
+                                              : null,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            } else {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_connectedPrinters.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                          'Saved Printers (${_connectedPrinters.length})',
+                          style: Theme.of(context).textTheme.titleMedium),
+                    ),
+                  if (_connectedPrinters.isNotEmpty)
+                    SizedBox(
+                      height: 180,
+                      child: Scrollbar(
+                        controller: _connectedScrollController,
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          controller: _connectedScrollController,
+                          itemCount: _connectedPrinters.length,
+                          itemBuilder: (context, index) {
+                            final item = _connectedPrinters[index];
+                            return SavedPrinterTile(
+                              item: item,
+                              onDisconnect: () => _disconnectPrinter(item),
+                              onGetStatus: () => _getStatus(item),
+                              onSetNetworkSettings: () =>
+                                  _showNetworkSettingsDialog(
+                                      item: item, isUdp: false),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  if (_connectedPrinters.isNotEmpty)
+                    const Divider(height: 20, thickness: 1),
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                        _isSearching
+                            ? 'Searching...'
+                            : 'Found Printers (${_foundPrinters.length})',
+                        style: Theme.of(context).textTheme.titleMedium),
+                  ),
+                  Expanded(
+                    child: _foundPrinters.isEmpty && !_isSearching
+                        ? const Center(
+                            child:
+                                Text('No printers found. Tap search button.'))
+                        : Scrollbar(
+                            controller: _foundScrollController,
+                            thumbVisibility: true,
+                            child: ListView.builder(
+                              controller: _foundScrollController,
+                              itemCount: _foundPrinters.length,
+                              itemBuilder: (context, index) {
+                                final item = _foundPrinters[index];
+                                return FoundPrinterTile(
+                                  item: item,
+                                  onAdd: () => _connectToPrinter(item),
+                                  onConfigureUdp: item.discoveredPrinter.type ==
+                                          PosPrinterConnectionType.network
+                                      ? () => _showNetworkSettingsDialog(
+                                          item: item, isUdp: true)
+                                      : null,
+                                );
+                              },
+                            ),
+                          ),
+                  ),
+                ],
+              );
+            }
+          },
         ),
       ),
     );

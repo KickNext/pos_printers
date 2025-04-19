@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:pos_printers/pos_printers.dart';
 import '../models/printer_item.dart';
-import 'printer_list_tile.dart'; // Import the common tile
+import 'printer_list_tile.dart';
 
-/// Displays the list of connected printers.
+/// Displays the list of saved (connected) printers.
 class ConnectedPrintersSection extends StatelessWidget {
   final List<PrinterItem> connectedPrinters;
   final Function(PrinterItem) onDisconnect;
   final Function(PrinterItem) onGetStatus;
   final Function(PrinterItem) onSetNetworkSettings;
   final Function(PrinterItem, LabelPrinterLanguage?) onLanguageSelected;
-  final Function(PrinterItem) onPrintEscHtml; // Callback for printing ESC/POS HTML
-  final Function(PrinterItem) onPrintEscPosData; // Callback for printing ESC/POS Raw
-  final Function(PrinterItem) onPrintLabelRaw; // Callback for printing Label Raw
-  final Function(PrinterItem) onPrintLabelHtml; // Callback for printing Label HTML
-  final Function(PrinterItem) onSetupLabelParams; // Callback for setting label params
+  final Function(PrinterItem) onPrintEscHtml;
+  final Function(PrinterItem) onPrintEscPosData;
+  final Function(PrinterItem) onPrintLabelRaw;
+  final Function(PrinterItem) onPrintLabelHtml;
+  final Function(PrinterItem) onSetupLabelParams;
 
   const ConnectedPrintersSection({
     super.key,
@@ -33,7 +33,7 @@ class ConnectedPrintersSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (connectedPrinters.isEmpty) {
-      return const SizedBox.shrink(); // Don't show anything if empty
+      return const SizedBox.shrink();
     }
 
     return Column(
@@ -41,7 +41,7 @@ class ConnectedPrintersSection extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Text('Connected Printers (${connectedPrinters.length})',
+          child: Text('Saved Printers (${connectedPrinters.length})',
               style: Theme.of(context).textTheme.titleMedium),
         ),
         ListView.builder(
@@ -50,20 +50,12 @@ class ConnectedPrintersSection extends StatelessWidget {
           itemCount: connectedPrinters.length,
           itemBuilder: (context, index) {
             final item = connectedPrinters[index];
-            return PrinterListTile(
+            return SavedPrinterTile(
               item: item,
-              isConnected: true,
-              onConnect: (_) {}, // Already connected
-              onDisconnect: onDisconnect,
-              onGetStatus: onGetStatus,
-              onSetNetworkSettings: onSetNetworkSettings,
-              onConfigureUdp: (_) {}, // Not applicable here
+              onDisconnect: () => onDisconnect(item),
+              onGetStatus: () => onGetStatus(item),
+              onSetNetworkSettings: () => onSetNetworkSettings(item),
               onLanguageSelected: onLanguageSelected,
-              // Add print actions specific to connected printers if needed
-              // Example: Add a print button directly here
-              // trailingActions: [
-              //    IconButton(icon: Icon(Icons.print), onPressed: () => _handlePrint(item)),
-              // ]
             );
           },
         ),
@@ -71,18 +63,4 @@ class ConnectedPrintersSection extends StatelessWidget {
       ],
     );
   }
-
-  // Example of how print actions could be handled if added to the tile directly
-  // void _handlePrint(PrinterItem item) {
-  //   if (item.isLabelPrinter) {
-  //     if (item.language != null) {
-  //       onSetupLabelParams(item); // Setup before print
-  //       onPrintLabelHtml(item);
-  //       // Maybe add raw print too?
-  //     }
-  //   } else {
-  //     onPrintEscHtml(item);
-  //     // Maybe add raw print too?
-  //   }
-  // }
 }

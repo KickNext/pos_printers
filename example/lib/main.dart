@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'app/printer_app.dart';
 
-/// Пример приложения, которое:
-/// 1) Ищет доступные принтеры (USB, Network),
-/// 2) Позволяет подключаться к нескольким принтерам,
-/// 3) Даёт возможность указать тип/язык (ESC/POS, CPCL, TSPL, ZPL),
-/// 4) Печатает и чековые команды, и лейбл-команды,
-/// 5) Позволяет настраивать сетевые параметры и режим перевернутой печати.
+/// Example app that:
+/// 1) Searches for available printers (USB, Network),
+/// 2) Allows connecting to multiple printers,
+/// 3) Lets you specify type/language (ESC/POS, CPCL, TSPL, ZPL),
+/// 4) Prints both receipt and label commands,
+/// 5) Allows configuring network settings and inverted print mode.
 void main() {
   WidgetsFlutterBinding.ensureInitialized(); // Ensure initialization
   runApp(const PrintersApp());
