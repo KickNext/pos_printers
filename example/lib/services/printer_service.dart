@@ -16,7 +16,7 @@ class PrinterService {
 
   /// Start searching for printers
   Stream<DiscoveredPrinterDTO> findPrinters() {
-    final stream = _posPrintersManager.findPrinters();
+    final stream = _posPrintersManager.findPrinters(filter: null);
     return stream;
   }
 
@@ -35,16 +35,6 @@ class PrinterService {
     return a.id == b.id;
   }
 
-  /// Connect to a printer
-  Future<void> connectToPrinter(PrinterItem item) {
-    return _posPrintersManager.connectPrinter(item.connectionParams);
-  }
-
-  /// Disconnect from a printer
-  Future<void> disconnectPrinter(PrinterItem item) async {
-    await _posPrintersManager.disconnectPrinter(item.connectionParams);
-  }
-
   /// Get printer status
   Future<StatusResult> getPrinterStatus(PrinterItem item) {
     return _posPrintersManager.getPrinterStatus(item.connectionParams);
@@ -52,11 +42,11 @@ class PrinterService {
 
   /// Example: print HTML for receipt (ESC/POS)
   Future<void> printEscHtml(PrinterItem item) async {
-    if (item.discoveredPrinter.printerType == PrinterType.zpl) {
+    if (item.discoveredPrinter.printerLanguage == PrinterLanguage.zpl) {
       debugPrint('Skipping ESC/POS HTML print for ZPL label printer.');
       throw Exception('Invalid printer type: ZPL');
     }
-    await _posPrintersManager.printReceiptHTML(
+    await _posPrintersManager.printEscHTML(
       item.connectionParams,
       "<h1>ESC/POS Html</h1><p>Some text</p>",
       576, // 80mm width in dots (for 203 dpi)
@@ -65,7 +55,7 @@ class PrinterService {
 
   /// Print raw ESC/POS commands
   Future<void> printEscPosData(PrinterItem item) async {
-    if (item.discoveredPrinter.printerType == PrinterType.zpl) {
+    if (item.discoveredPrinter.printerLanguage == PrinterLanguage.zpl) {
       debugPrint('Skipping ESC/POS raw print for ZPL label printer.');
       throw Exception('Invalid printer type: ZPL');
     }
@@ -75,13 +65,13 @@ class PrinterService {
     bytes.addAll("Hello ESC/POS\n".codeUnits);
     bytes.add(0x0A); // LF
     bytes.addAll([0x1D, 0x56, 0x41, 0x10]); // Partial cut
-    await _posPrintersManager.printReceiptData(
+    await _posPrintersManager.printEscRawData(
         item.connectionParams, Uint8List.fromList(bytes), 576);
   }
 
   /// Print raw ZPL label commands
-  Future<void> printLabelRaw(PrinterItem item) async {
-    if (item.discoveredPrinter.printerType != PrinterType.zpl) {
+  Future<void> printZplRawData(PrinterItem item) async {
+    if (item.discoveredPrinter.printerLanguage != PrinterLanguage.zpl) {
       throw Exception('Only ZPL label printers are supported');
     }
     // Simple ZPL sample
@@ -96,9 +86,8 @@ class PrinterService {
   ^BQN,2,4           
   ^FDLA,https://example.com/luna-bloom-candle^FS
   ^XZ\r\n''';
-    await _posPrintersManager.printLabelData(
+    await _posPrintersManager.printZplRawData(
       item.connectionParams,
-      LabelPrinterLanguage.zpl,
       Uint8List.fromList(commands.codeUnits),
       673,
     );
@@ -106,7 +95,7 @@ class PrinterService {
 
   /// Print HTML for ZPL label printer
   Future<void> printLabelHtml(PrinterItem item) async {
-    if (item.discoveredPrinter.printerType != PrinterType.zpl) {
+    if (item.discoveredPrinter.printerLanguage != PrinterLanguage.zpl) {
       throw Exception('Only ZPL label printers are supported');
     }
     final html = generatePriceTagHtml(
@@ -117,9 +106,8 @@ class PrinterService {
     );
     const widthDots = 673; // 58 mm at 8 dots/mm
     const heightDots = 449; // 40 mm at 8 dots/mm
-    await _posPrintersManager.printLabelHTML(
+    await _posPrintersManager.printZplHtml(
       item.connectionParams,
-      LabelPrinterLanguage.zpl,
       html,
       widthDots,
       heightDots,
@@ -133,8 +121,9 @@ class PrinterService {
 
   /// Sets network settings via active connection
   Future<void> setNetSettingsViaConnection(
-      PrinterItem item, NetSettingsDTO settings) async {
-    if (item.discoveredPrinter.type != PosPrinterConnectionType.network) {
+      PrinterItem item, NetworkParams settings) async {
+    if (item.discoveredPrinter.connectionParams.connectionType !=
+        PosPrinterConnectionType.network) {
       throw Exception('This function is only for network printers');
     }
     await _posPrintersManager.setNetSettings(item.connectionParams, settings);
@@ -142,8 +131,9 @@ class PrinterService {
 
   /// Configures network settings via UDP broadcast
   Future<void> configureNetViaUDP(
-      PrinterItem item, NetSettingsDTO settings) async {
-    final mac = item.discoveredPrinter.networkParams?.macAddress;
+      PrinterItem item, NetworkParams settings) async {
+    final mac =
+        item.discoveredPrinter.connectionParams.networkParams?.macAddress;
     if (mac == null || mac.isEmpty) {
       throw Exception(
           'MAC address not found for this printer. Cannot configure via UDP.');

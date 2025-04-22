@@ -11,23 +11,30 @@ import 'package:pigeon/pigeon.dart';
     package: 'com.kicknext.pos_printers.gen',
   ),
 ))
+
 enum PosPrinterConnectionType {
   usb,
   network,
 }
 
-/// Язык лейбл-принтера (CPCL / TSPL / ZPL)
-enum LabelPrinterLanguage {
-  cpcl,
-  tspl,
-  zpl,
+class PrinterDiscoveryFilter {
+  final List<PrinterLanguage>? languages;
+  final List<DiscoveryConnectionType>? connectionTypes;
+
+  PrinterDiscoveryFilter(
+      {required this.languages, required this.connectionTypes});
 }
 
-/// Фильтр для поиска принтеров по протоколу
-enum PrinterDiscoveryFilter { escpos, zpl, all }
+enum PrinterLanguage {
+  esc,
+  zpl;
+}
 
-/// Тип принтера для определения протокола печати
-enum PrinterType { escpos, zpl, unknown }
+enum DiscoveryConnectionType {
+  usb,
+  sdk,
+  tcp;
+}
 
 class PrinterConnectionParams {
   final PosPrinterConnectionType connectionType;
@@ -73,20 +80,6 @@ class NetworkParams {
   });
 }
 
-class NetSettingsDTO {
-  final String ipAddress;
-  final String mask;
-  final String gateway;
-  final bool dhcp;
-
-  NetSettingsDTO({
-    required this.ipAddress,
-    required this.mask,
-    required this.gateway,
-    required this.dhcp,
-  });
-}
-
 /// Результат статуса ZPL‑принтера
 class ZPLStatusResult {
   final bool success;
@@ -97,22 +90,6 @@ class ZPLStatusResult {
       {required this.success, required this.code, this.errorMessage});
 }
 
-/// DTO с расширенной информацией о принтере
-// class PrinterDetailsDTO {
-//   final String? serialNumber;
-//   final String? firmwareVersion;
-//   final String? deviceModel;
-//   final String? currentStatus;
-
-//   PrinterDetailsDTO({
-//     this.serialNumber,
-//     this.firmwareVersion,
-//     this.deviceModel,
-//     this.currentStatus,
-//   });
-// }
-
-/// Result for getting printer status.
 class StatusResult {
   final bool success;
   final String? errorMessage;
@@ -131,33 +108,19 @@ class StringResult {
 
 class DiscoveredPrinterDTO {
   final String id;
-  final PosPrinterConnectionType type;
-  final PrinterType printerType;
-  final UsbParams? usbParams;
-  final NetworkParams? networkParams;
+  final PrinterLanguage? printerLanguage;
+  final PrinterConnectionParams connectionParams;
 
   DiscoveredPrinterDTO({
     required this.id,
-    required this.type,
-    required this.printerType,
-    this.usbParams,
-    this.networkParams,
+    required this.printerLanguage,
+    required this.connectionParams,
   });
 }
 
 @HostApi()
 abstract class POSPrintersApi {
-  /// Инициирует асинхронный поиск принтеров (USB, SDK Net, TCP Net).
-  /// [filter] — фильтр типов принтеров (escpos, zpl, all)
-  void findPrinters(PrinterDiscoveryFilter filter);
-
-  @async
-  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void connectPrinter(PrinterConnectionParams printer);
-
-  @async
-  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void disconnectPrinter(PrinterConnectionParams printer);
+  void findPrinters(PrinterDiscoveryFilter? filter);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
@@ -171,51 +134,40 @@ abstract class POSPrintersApi {
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void openCashBox(PrinterConnectionParams printer);
 
-  /// Печать HTML для обычных чековых ESC/POS принтеров.
   @async
-  @TaskQueue(
-      type: TaskQueueType
-          .serialBackgroundThread) // Reverted: Concurrent not supported by Pigeon TaskQueueType
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void printHTML(PrinterConnectionParams printer, String html, int width);
 
-  /// Печать сырых ESC/POS команд.
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
   void printData(PrinterConnectionParams printer, Uint8List data, int width);
 
-  /// Настройка сетевых параметров через существующее соединение
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void setNetSettingsToPrinter(
-      PrinterConnectionParams printer, NetSettingsDTO netSettings);
+      PrinterConnectionParams printer, NetworkParams netSettings);
 
-  /// Настройка сетевых параметров через UDP broadcast (требуется MAC-адрес)
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void configureNetViaUDP(String macAddress, NetSettingsDTO netSettings);
+  void configureNetViaUDP(NetworkParams netSettings);
 
-  /// Печать "сырых" команд (CPCL/TSPL/ZPL), если нужно.
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
-  void printLabelData(
+  void printZplRawData(
     PrinterConnectionParams printer,
-    LabelPrinterLanguage language,
     Uint8List labelCommands,
     int width,
   );
 
-  /// Печать HTML на лейбл-принтер (рендерим HTML -> bitmap),
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
-  void printLabelHTML(
+  void printZplHtml(
     PrinterConnectionParams printer,
-    LabelPrinterLanguage language,
     String html,
     int width,
     int height,
   );
 
-  /// Получить статус ZPL‑принтера (коды 00–80)
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   ZPLStatusResult getZPLPrinterStatus(PrinterConnectionParams printer);

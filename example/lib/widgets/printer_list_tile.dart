@@ -8,7 +8,6 @@ class SavedPrinterTile extends StatelessWidget {
   final VoidCallback? onDisconnect;
   final VoidCallback? onGetStatus;
   final VoidCallback? onSetNetworkSettings;
-  final void Function(PrinterItem, LabelPrinterLanguage?)? onLanguageSelected;
 
   const SavedPrinterTile({
     super.key,
@@ -16,13 +15,12 @@ class SavedPrinterTile extends StatelessWidget {
     this.onDisconnect,
     this.onGetStatus,
     this.onSetNetworkSettings,
-    this.onLanguageSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isNetwork =
-        item.discoveredPrinter.type == PosPrinterConnectionType.network;
+    final isNetwork = item.discoveredPrinter.connectionParams.connectionType ==
+        PosPrinterConnectionType.network;
     final statusColor = item.isConnected ? Colors.green : Colors.red;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
@@ -63,7 +61,7 @@ class SavedPrinterTile extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
               child: Text(
-                'Type: ${item.discoveredPrinter.printerType.name.toUpperCase()}',
+                'Type: ${item.discoveredPrinter.printerLanguage?.name.toUpperCase()}',
                 style: const TextStyle(fontStyle: FontStyle.italic),
               ),
             ),
@@ -92,23 +90,22 @@ class SavedPrinterTile extends StatelessWidget {
 class FoundPrinterTile extends StatelessWidget {
   final PrinterItem item;
   final VoidCallback? onAdd;
-  final void Function(PrinterItem, LabelPrinterLanguage?)? onLanguageSelected;
   final VoidCallback? onConfigureUdp;
 
   const FoundPrinterTile({
     super.key,
     required this.item,
     this.onAdd,
-    this.onLanguageSelected,
     this.onConfigureUdp,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isNetwork =
-        item.discoveredPrinter.type == PosPrinterConnectionType.network;
-    final hasMAC =
-        item.discoveredPrinter.networkParams?.macAddress?.isNotEmpty ?? false;
+    final isNetwork = item.discoveredPrinter.connectionParams.connectionType ==
+        PosPrinterConnectionType.network;
+    final hasMAC = item.discoveredPrinter.connectionParams.networkParams
+            ?.macAddress?.isNotEmpty ??
+        false;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
       elevation: 1.0,
@@ -148,7 +145,7 @@ class FoundPrinterTile extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
               child: Text(
-                'Type: ${item.discoveredPrinter.printerType.name.toUpperCase()}',
+                'Type: ${item.discoveredPrinter.printerLanguage?.name.toUpperCase()}',
                 style: const TextStyle(fontStyle: FontStyle.italic),
               ),
             ),

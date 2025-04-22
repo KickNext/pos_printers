@@ -24,26 +24,6 @@ class PrinterItem {
     this.isConnected = true,
     this.isSaved = false,
   }) {
-    // Initialize connection parameters based on discovered printer
-    if (discoveredPrinter.type == PosPrinterConnectionType.usb) {
-      connectionParams = PrinterConnectionParams(
-        connectionType: PosPrinterConnectionType.usb,
-        usbParams: UsbParams(
-          vendorId: discoveredPrinter.usbParams!.vendorId,
-          productId: discoveredPrinter.usbParams!.productId,
-          usbSerialNumber: discoveredPrinter.usbParams!.usbSerialNumber,
-          manufacturer: discoveredPrinter.usbParams!.manufacturer,
-          productName: discoveredPrinter.usbParams!.productName,
-        ),
-      );
-    } else {
-      connectionParams = PrinterConnectionParams(
-        connectionType: PosPrinterConnectionType.network,
-        networkParams: NetworkParams(
-          ipAddress: discoveredPrinter.networkParams!.ipAddress,
-          macAddress: discoveredPrinter.networkParams!.macAddress,
-        ),
-      );
-    }
+    connectionParams = discoveredPrinter.connectionParams;
   }
 }

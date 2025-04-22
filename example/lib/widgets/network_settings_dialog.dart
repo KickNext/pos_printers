@@ -4,7 +4,7 @@ import 'package:pos_printers/pos_printers.dart';
 /// Dialog for configuring printer network settings
 class NetworkSettingsDialog extends StatefulWidget {
   /// Initial settings to prefill the form fields
-  final NetSettingsDTO initialSettings;
+  final NetworkParams initialSettings;
 
   /// Creates a dialog for configuring printer network settings
   const NetworkSettingsDialog({
@@ -38,7 +38,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
     _maskController = TextEditingController(text: widget.initialSettings.mask);
     _gatewayController =
         TextEditingController(text: widget.initialSettings.gateway);
-    _useDhcp = widget.initialSettings.dhcp;
+    _useDhcp = widget.initialSettings.dhcp ?? false;
   }
 
   @override
@@ -185,7 +185,7 @@ class _NetworkSettingsDialogState extends State<NetworkSettingsDialog> {
           onPressed: () {
             if (_useDhcp || _formKey.currentState!.validate()) {
               // Create DTO with settings and return it
-              final settings = NetSettingsDTO(
+              final settings = NetworkParams(
                 ipAddress: _ipController.text,
                 mask: _maskController.text,
                 gateway: _gatewayController.text,

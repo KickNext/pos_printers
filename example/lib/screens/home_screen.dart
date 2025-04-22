@@ -156,7 +156,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Connect to a printer
   Future<void> _connectToPrinter(PrinterItem item) async {
     try {
-      await _printerService.connectToPrinter(item);
       if (mounted) {
         final alreadyIn = _savedPrinters.any((p) => _printerService.samePrinter(
             p.discoveredPrinter, item.discoveredPrinter));
@@ -177,7 +176,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Disconnect from a printer
   Future<void> _disconnectPrinter(PrinterItem item) async {
     try {
-      await _printerService.disconnectPrinter(item);
       if (mounted) {
         setState(() {
           _savedPrinters.removeWhere((p) => _printerService.samePrinter(
@@ -233,7 +231,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Set network settings via active connection
   Future<void> _setNetSettingsViaConnection(
-      PrinterItem item, NetSettingsDTO settings) async {
+      PrinterItem item, NetworkParams settings) async {
     _snackBarHelper
         .showInfoSnackbar('Applying network settings via connection...');
     try {
@@ -249,8 +247,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Configure network settings via UDP broadcast
   Future<void> _configureNetViaUDP(
-      PrinterItem item, NetSettingsDTO settings) async {
-    final mac = item.discoveredPrinter.networkParams?.macAddress;
+      PrinterItem item, NetworkParams settings) async {
+    final mac =
+        item.discoveredPrinter.connectionParams.networkParams?.macAddress;
     if (mac == null || mac.isEmpty) {
       _snackBarHelper.showErrorSnackbar(
           'MAC Address not found for this printer. Cannot configure via UDP.');
@@ -276,12 +275,13 @@ class _HomeScreenState extends State<HomeScreen> {
     // Pre-fill with current printer IP if connected and setting via connection
     String? initialIp;
     if (!isUdp &&
-        item.discoveredPrinter.type == PosPrinterConnectionType.network) {
+        item.discoveredPrinter.connectionParams.connectionType ==
+            PosPrinterConnectionType.network) {
       initialIp = item.connectionParams.networkParams?.ipAddress;
     }
 
     // Create default settings with pre-filled data
-    final initialSettings = NetSettingsDTO(
+    final initialSettings = NetworkParams(
       ipAddress: initialIp ?? '', // Use current IP if available
       mask: '255.255.255.0', // Default or fetch if possible
       gateway: '', // Default or fetch if possible
@@ -289,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     try {
-      final settings = await showDialog<NetSettingsDTO>(
+      final settings = await showDialog<NetworkParams>(
         context: context,
         barrierDismissible: true,
         builder: (context) => NetworkSettingsDialog(
@@ -333,12 +333,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 tooltip: 'Print test on all connected',
                 onPressed: () async {
                   for (final p in _connectedPrinters) {
-                    if (p.discoveredPrinter.printerType == PrinterType.zpl) {
+                    if (p.discoveredPrinter.printerLanguage ==
+                        PrinterLanguage.zpl) {
                       // ZPL label printer
                       try {
                         await _printerService.printLabelHtml(p);
                         await Future.delayed(const Duration(milliseconds: 500));
-                        await _printerService.printLabelRaw(p);
+                        await _printerService.printZplRawData(p);
                       } catch (e) {
                         _snackBarHelper
                             .showErrorSnackbar('Label print error: $e');
@@ -462,7 +463,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                           item: item,
                                           onAdd: () => _connectToPrinter(item),
                                           onConfigureUdp: item
-                                                      .discoveredPrinter.type ==
+                                                      .discoveredPrinter
+                                                      .connectionParams
+                                                      .connectionType ==
                                                   PosPrinterConnectionType
                                                       .network
                                               ? () =>
@@ -540,7 +543,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return FoundPrinterTile(
                                   item: item,
                                   onAdd: () => _connectToPrinter(item),
-                                  onConfigureUdp: item.discoveredPrinter.type ==
+                                  onConfigureUdp: item
+                                              .discoveredPrinter
+                                              .connectionParams
+                                              .connectionType ==
                                           PosPrinterConnectionType.network
                                       ? () => _showNetworkSettingsDialog(
                                           item: item, isUdp: true)

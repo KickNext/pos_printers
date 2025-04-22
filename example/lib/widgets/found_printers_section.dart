@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:pos_printers/pos_printers.dart';
 import '../models/printer_item.dart';
 import 'printer_list_tile.dart';
 
@@ -9,7 +8,6 @@ class FoundPrintersSection extends StatelessWidget {
   final bool isSearching;
   final Function(PrinterItem) onConnect;
   final Function(PrinterItem) onConfigureUdp;
-  final Function(PrinterItem, LabelPrinterLanguage?) onLanguageSelected;
 
   const FoundPrintersSection({
     super.key,
@@ -17,7 +15,6 @@ class FoundPrintersSection extends StatelessWidget {
     required this.isSearching,
     required this.onConnect,
     required this.onConfigureUdp,
-    required this.onLanguageSelected,
   });
 
   @override
@@ -45,7 +42,6 @@ class FoundPrintersSection extends StatelessWidget {
                       item: item,
                       onAdd: () => onConnect(item),
                       onConfigureUdp: () => onConfigureUdp(item),
-                      onLanguageSelected: onLanguageSelected,
                     );
                   },
                 ),

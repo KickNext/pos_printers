@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:pos_printers/pos_printers.dart';
 import '../models/printer_item.dart';
 import 'printer_list_tile.dart';
 
@@ -9,7 +8,7 @@ class ConnectedPrintersSection extends StatelessWidget {
   final Function(PrinterItem) onDisconnect;
   final Function(PrinterItem) onGetStatus;
   final Function(PrinterItem) onSetNetworkSettings;
-  final Function(PrinterItem, LabelPrinterLanguage?) onLanguageSelected;
+  final Function(PrinterItem) onLanguageSelected;
   final Function(PrinterItem) onPrintEscHtml;
   final Function(PrinterItem) onPrintEscPosData;
   final Function(PrinterItem) onPrintLabelRaw;
@@ -55,7 +54,6 @@ class ConnectedPrintersSection extends StatelessWidget {
               onDisconnect: () => onDisconnect(item),
               onGetStatus: () => onGetStatus(item),
               onSetNetworkSettings: () => onSetNetworkSettings(item),
-              onLanguageSelected: onLanguageSelected,
             );
           },
         ),
