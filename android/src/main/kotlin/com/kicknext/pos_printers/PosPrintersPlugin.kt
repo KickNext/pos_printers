@@ -865,8 +865,8 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     private suspend fun getPrinterConnectionSuspending(printer: PrinterConnectionParams): IDeviceConnection =
         suspendCancellableCoroutine { cont ->
             val resumed = java.util.concurrent.atomic.AtomicBoolean(false)
+            var newConnection: IDeviceConnection? = null
             try {
-                val newConnection: IDeviceConnection
                 val connectionTargetInfo: String
                 when (printer.connectionType) {
                     PosPrinterConnectionType.USB -> {
@@ -892,29 +892,31 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     }
                 }
 
+                cont.invokeOnCancellation {
+                    newConnection?.close()
+                }
+
                 val listener = IConnectListener { code, _, _ ->
+                    if (!cont.isActive) {
+                        newConnection?.close()
+                        return@IConnectListener
+                    }
                     if (code == POSConnect.CONNECT_SUCCESS) {
                         if (resumed.compareAndSet(false, true)) {
-                            cont.resume(newConnection)
-                        } else {
-                            Log.w("POSPrinters", "Continuation already resumed (success)")
+                            cont.resume(newConnection!!)
                         }
                     } else {
                         newConnection?.close()
                         if (resumed.compareAndSet(false, true)) {
                             cont.resumeWithException(Exception("Connection failed with code $code"))
-                        } else {
-                            Log.w("POSPrinters", "Continuation already resumed (fail)")
                         }
                     }
                 }
 
-                newConnection.connect(connectionTargetInfo, listener)
+                newConnection!!.connect(connectionTargetInfo, listener)
             } catch (e: Throwable) {
-                if (resumed.compareAndSet(false, true)) {
+                if (resumed.compareAndSet(false, true) && cont.isActive) {
                     cont.resumeWithException(e)
-                } else {
-                    Log.w("POSPrinters", "Continuation already resumed (exception in catch): ${e.message}")
                 }
             }
         }
