@@ -862,60 +862,66 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             }
         }
 
-    private suspend fun getPrinterConnectionSuspending(printer: PrinterConnectionParams): IDeviceConnection =
-        suspendCancellableCoroutine { cont ->
-            var newConnection: IDeviceConnection? = null
-            try {
-                val connectionTargetInfo: String
-                when (printer.connectionType) {
-                    PosPrinterConnectionType.USB -> {
-                        val usbParams = printer.usbParams ?: throw Exception("Missing USB params")
-                        val usbDevice = findUsbDevice(
-                            usbParams.vendorId.toInt(),
-                            usbParams.productId.toInt(),
-                            usbParams.usbSerialNumber
-                        ) ?: throw Exception("USB device not found")
+    private suspend fun getPrinterConnectionSuspending(
+        printer: PrinterConnectionParams
+    ): IDeviceConnection = suspendCancellableCoroutine { cont ->
 
-                        if (!usbManager.hasPermission(usbDevice)) {
-                            throw Exception("USB permission denied")
-                        }
+        val resumed = java.util.concurrent.atomic.AtomicBoolean(false)
+        var newConnection: IDeviceConnection? = null
 
-                        newConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
-                        connectionTargetInfo = usbDevice.deviceName
-                    }
+        fun tryClose() = runCatching { newConnection?.close() }
 
-                    PosPrinterConnectionType.NETWORK -> {
-                        val ip = printer.networkParams?.ipAddress ?: throw Exception("Missing IP address")
-                        newConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-                        connectionTargetInfo = ip
-                    }
+        try {
+            val target: String
+            newConnection = when (printer.connectionType) {
+                PosPrinterConnectionType.USB -> {
+                    val usb = findUsbDevice(
+                        printer.usbParams!!.vendorId.toInt(),
+                        printer.usbParams.productId.toInt(),
+                        printer.usbParams.usbSerialNumber
+                    ) ?: throw Exception("USB device not found")
+                    if (!usbManager.hasPermission(usb)) throw Exception("USB permission denied")
+                    target = usb.deviceName
+                    POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
                 }
-
-                cont.invokeOnCancellation {
-                    newConnection?.close()
-                }
-
-                val listener = IConnectListener { code, _, _ ->
-                    if (!cont.isActive) {
-                        newConnection?.close()
-                        return@IConnectListener
-                    }
-                    if (code == POSConnect.CONNECT_SUCCESS) {
-                        cont.resume(newConnection!!)
-                    } else {
-                        newConnection?.close()
-                        cont.resumeWithException(Exception("Connection failed with code $code"))
-                    }
-                }
-
-                newConnection!!.connect(connectionTargetInfo, listener)
-            } catch (e: Throwable) {
-                if (cont.isActive) {
-                    newConnection?.close()
-                    cont.resumeWithException(e)
+                PosPrinterConnectionType.NETWORK -> {
+                    target = printer.networkParams!!.ipAddress
+                    POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
                 }
             }
+
+            // Закрываем соединение, если корутину отменили «снаружи»
+            cont.invokeOnCancellation { tryClose() }
+
+            val listener = IConnectListener { code, _, _ ->
+                if (resumed.get()) return@IConnectListener      // уже ответили
+
+                when (code) {
+                    POSConnect.CONNECT_SUCCESS -> {
+                        if (resumed.compareAndSet(false, true)) {
+                            cont.resume(newConnection!!)
+                        }
+                    }
+                    else -> {                                   // CONNECT_FAIL, SEND_FAIL и т.д.
+                        tryClose()
+                        if (resumed.compareAndSet(false, true)) {
+                            cont.resumeWithException(
+                                Exception("Connection failed with code $code")
+                            )
+                        }
+                    }
+                }
+            }
+
+            newConnection!!.connect(target, listener)
+
+        } catch (e: Throwable) {
+            tryClose()
+            if (resumed.compareAndSet(false, true)) {
+                cont.resumeWithException(e)
+            }
         }
+    }
 
     private fun findUsbDevice(vendorId: Int, productId: Int, serialNumber: String?): UsbDevice? {
         val devices = usbManager.deviceList.values
