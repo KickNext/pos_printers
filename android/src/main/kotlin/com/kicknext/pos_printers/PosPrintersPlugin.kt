@@ -866,6 +866,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         suspendCancellableCoroutine { cont ->
             val newConnection: IDeviceConnection
             val connectionTargetInfo: String
+            val resumed = java.util.concurrent.atomic.AtomicBoolean(false) // добавлено
             try {
                 when (printer.connectionType) {
                     PosPrinterConnectionType.USB -> {
@@ -893,10 +894,14 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
                 val listener = IConnectListener { code, _, _ ->
                     if (code == POSConnect.CONNECT_SUCCESS) {
-                        cont.resume(newConnection)
+                        if (resumed.compareAndSet(false, true)) {
+                            cont.resume(newConnection)
+                        }
                     } else {
                         newConnection?.close()
-                        cont.resumeWithException(Exception("Connection failed with code $code"))
+                        if (resumed.compareAndSet(false, true)) {
+                            cont.resumeWithException(Exception("Connection failed with code $code"))
+                        }
                     }
                 }
 
