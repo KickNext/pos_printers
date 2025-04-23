@@ -958,15 +958,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
                 val curPrinter = POSPrinter(connection)
-
                 curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
-
-
                 curPrinter.sendData(data)
-
-                Log.d("POSPrinters", "Raw data sent (assuming success).")
-                // Return success immediately after sending, without waiting for status.
-                // Status check can be done separately via getPrinterStatus if needed.
+                connection.close()
                 callback(Result.success(Unit))
             } catch (platformError: Throwable) {
                 Log.e(
@@ -988,7 +982,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
-                Log.d("POSPrinters", "Generating bitmap from HTML...")
                 val content = WebViewContent.html(html)
                 val bitmap = Html2Bitmap.Builder()
                     .setBitmapWidth(width.toInt())
@@ -997,17 +990,11 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     .setContext(applicationContext) // Use applicationContext
                     .build()
                     .bitmap
-
                 val curPrinter = POSPrinter(connection)
-                Log.d("POSPrinters", "Bitmap generated. Initializing printer for HTML print...")
                 curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
-
                 curPrinter.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
-
                 curPrinter.cutHalfAndFeed(1)
-
-                Log.d("POSPrinters", "Bitmap printed and cut (assuming success).")
-                // Return success immediately after sending commands, without waiting for status.
+                connection.close()
                 callback(Result.success(Unit))
             } catch (platformError: Throwable) {
                 Log.e(
@@ -1025,13 +1012,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
                 val curPrinter = POSPrinter(connection)
-                Log.d("POSPrinters", "Initializing printer for open cash box...")
-                curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
-                // Assume success if no exception
-                Log.d("POSPrinters", "Sending open cash box command...")
+                curPrinter.initializePrinter()
                 curPrinter.openCashBox(POSConst.PIN_TWO)
-                Log.d("POSPrinters", "Open cash box command sent (assumed success).")
-                // Status check might not be relevant/reliable immediately after cashbox open
+                connection.close()
                 callback(Result.success(Unit))
             } catch (platformError: Throwable) {
                 Log.e(
@@ -1052,18 +1035,13 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
                 val pos = POSPrinter(connection)
-                Log.d("POSPrinters", "Initializing printer and requesting status...")
                 pos.initializePrinter() // Ensure printer is in ESC/POS mode before status check
                 pos.printerStatus { status ->
-                    Log.d(
-                        "POSPrinters",
-                        "getPrinterStatus callback received: status code = $status"
-                    )
                     val text = mapStatusCodeToString(status) // Use helper function
                     // Check if status indicates an error state based on the text mapping
                     val isErrorStatus =
                         status < POSConst.STS_NORMAL || status == POSConst.STS_PRINTER_ERR
-                    Log.d("POSPrinters", "Mapped status: '$text', IsError: $isErrorStatus")
+                    connection.close()
                     if (isErrorStatus) {
                         callback(Result.failure(Exception(text)))
                     } else {
@@ -1071,11 +1049,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     }
                 }
             } catch (platformError: Throwable) {
-                Log.e(
-                    "POSPrinters",
-                    "Exception during getPrinterStatus: ${platformError.message}",
-                    platformError
-                )
                 callback(Result.failure(Exception("Get status exception: ${platformError.message}")))
             }
         }
@@ -1088,11 +1061,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
-                Log.d("POSPrinters", "Initializing printer and requesting serial number...")
                 val pos = POSPrinter(connection)
-                pos.initializePrinter() // Ensure printer is in ESC/POS mode before getting SN
+                pos.initializePrinter()
                 pos.getSerialNumber { sn ->
-                    Log.d("POSPrinters", "getSerialNumber callback received.")
                     val snString = try {
                         String(sn, charset("GBK"))
                     } catch (e: Exception) {
@@ -1102,7 +1073,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                             "Error decoding SN"
                         } // Improved fallback
                     }
-                    Log.d("POSPrinters", "Decoded SN: '$snString'")
+                    connection.close()
                     if (snString.isEmpty() || snString == "Error decoding SN") {
                         callback(Result.failure(Exception("Failed to decode serial number: $snString")))
                     } else {
@@ -1125,10 +1096,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         netSettings: NetworkParams,
         callback: (Result<Unit>) -> Unit
     ) {
-        Log.d(
-            "POSPrinters",
-            "setNetSettingsToPrinter called for params: $printer, settings: $netSettings"
-        )
+
         try {
             val ip = parseData(netSettings.ipAddress)
             val mask = parseData(netSettings.mask!!)
@@ -1336,12 +1304,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
-
                 val zpl = ZPLPrinter(connection)
-                zpl.setPrinterWidth(width.toInt())
-                // НЕ вызывай addStart/addEnd, если ZPL уже с ^XA/^XZ
                 zpl.sendData(labelCommands)
-
+                connection.close()
                 callback(Result.success(Unit))
             } catch (e: Throwable) {
                 Log.e("POSPrinters", "Print failed: ${e.message}", e)
@@ -1375,9 +1340,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             zpl.addStart()
             zpl.printBmpCompress(0, 0, bmp, width.toInt(), AlgorithmType.Dithering)
             zpl.addEnd()
-
-
-            // Assume success if no exception during bitmap creation or printing
+            connection.close()
             callback(Result.success(Unit))
         } catch (e: Throwable) {
             Log.e("POSPrinters", "Exception during printLabelHTML: ${e.message}", e)
@@ -1397,6 +1360,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     val zpl = ZPLPrinter(connection)
                     zpl.printerStatus(500, { code ->
                         val success = code == 0
+                        connection.close()
                         val result = if (success) {
                             ZPLStatusResult(true, code.toLong(), null)
                         } else {
