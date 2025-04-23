@@ -864,10 +864,10 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
     private suspend fun getPrinterConnectionSuspending(printer: PrinterConnectionParams): IDeviceConnection =
         suspendCancellableCoroutine { cont ->
-            val newConnection: IDeviceConnection
-            val connectionTargetInfo: String
-            val resumed = java.util.concurrent.atomic.AtomicBoolean(false) // добавлено
+            val resumed = java.util.concurrent.atomic.AtomicBoolean(false)
             try {
+                val newConnection: IDeviceConnection
+                val connectionTargetInfo: String
                 when (printer.connectionType) {
                     PosPrinterConnectionType.USB -> {
                         val usbParams = printer.usbParams ?: throw Exception("Missing USB params")
@@ -896,11 +896,15 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     if (code == POSConnect.CONNECT_SUCCESS) {
                         if (resumed.compareAndSet(false, true)) {
                             cont.resume(newConnection)
+                        } else {
+                            Log.w("POSPrinters", "Continuation already resumed (success)")
                         }
                     } else {
                         newConnection?.close()
                         if (resumed.compareAndSet(false, true)) {
                             cont.resumeWithException(Exception("Connection failed with code $code"))
+                        } else {
+                            Log.w("POSPrinters", "Continuation already resumed (fail)")
                         }
                     }
                 }
@@ -909,6 +913,8 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             } catch (e: Throwable) {
                 if (resumed.compareAndSet(false, true)) {
                     cont.resumeWithException(e)
+                } else {
+                    Log.w("POSPrinters", "Continuation already resumed (exception in catch): ${e.message}")
                 }
             }
         }
