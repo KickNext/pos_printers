@@ -167,6 +167,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     // Detect printer type by probing ESC/POS then ZPL
     private suspend fun detectType(connectionParams: PrinterConnectionParams): PrinterLanguage? =
         suspendCancellableCoroutine { cont ->
+            val resumed = java.util.concurrent.atomic.AtomicBoolean(false)
             val connection: IDeviceConnection
             val target: String
 
@@ -193,19 +194,19 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     }
 
                     else -> {
-                        cont.resume(null)
+                        if (resumed.compareAndSet(false, true)) cont.resume(null)
                         return@suspendCancellableCoroutine
                     }
                 }
             } catch (e: Exception) {
-                cont.resume(null)
+                if (resumed.compareAndSet(false, true)) cont.resume(null)
                 return@suspendCancellableCoroutine
             }
 
             // Listener подключения
             val listener = IConnectListener { code, _, _ ->
                 if (code != POSConnect.CONNECT_SUCCESS) {
-                    cont.resume(null)
+                    if (resumed.compareAndSet(false, true)) cont.resume(null)
                     return@IConnectListener
                 }
 
@@ -216,31 +217,31 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     posPrinter.printerStatus { escStatus ->
                         if (escStatus >= POSConst.STS_NORMAL) {
                             connection.close()
-                            cont.resume(PrinterLanguage.ESC)
+                            if (resumed.compareAndSet(false, true)) cont.resume(PrinterLanguage.ESC)
                         } else {
                             try {
                                 val zplPrinter = ZPLPrinter(connection)
                                 zplPrinter.printerStatus { zplCode ->
                                     val type = if (zplCode in 0..0x80) PrinterLanguage.ZPL else null
                                     connection.close()
-                                    cont.resume(type)
+                                    if (resumed.compareAndSet(false, true)) cont.resume(type)
                                 }
                             } catch (zplEx: Exception) {
                                 connection.close()
-                                cont.resume(null)
+                                if (resumed.compareAndSet(false, true)) cont.resume(null)
                             }
                         }
                     }
                 } catch (ex: Exception) {
                     connection.close()
-                    cont.resume(null)
+                    if (resumed.compareAndSet(false, true)) cont.resume(null)
                 }
             }
 
             try {
                 connection.connect(target, listener)
             } catch (e: Exception) {
-                cont.resume(null)
+                if (resumed.compareAndSet(false, true)) cont.resume(null)
             }
         }
 
