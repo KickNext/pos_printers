@@ -76,7 +76,7 @@ class PrinterService {
     }
     // Simple ZPL sample
     const commands = '''^XA
-  ^PW456
+  ^PW673
   ^LL304            
   ^CF0,30              
   ^FO20,20^FDLuna Bloom Candle^FS

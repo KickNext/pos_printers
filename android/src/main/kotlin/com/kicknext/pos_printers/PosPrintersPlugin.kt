@@ -1323,7 +1323,10 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
 
             val zpl = ZPLPrinter(connection)
+            zpl.setPrinterWidth(width.toInt())
+            zpl.addStart()
             zpl.sendData(labelCommands)
+            zpl.addEnd()
 
 
             callback(Result.success(Unit))
@@ -1379,15 +1382,15 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
         try {
             val zpl = ZPLPrinter(connection)
-            zpl.printerStatus { code ->
-                val success = code in 0..0x80
+            zpl.printerStatus(500, { code ->
+                val success = code == 0
                 val result = if (success) {
                     ZPLStatusResult(true, code.toLong(), null)
                 } else {
                     ZPLStatusResult(false, code.toLong(), "ZPL status code $code")
                 }
                 callback(Result.success(result))
-            }
+            })
         } catch (e: Throwable) {
             callback(Result.failure(Exception("Get ZPL status exception: ${e.message}")))
         }
