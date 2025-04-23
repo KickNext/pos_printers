@@ -864,10 +864,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
     private suspend fun getPrinterConnectionSuspending(printer: PrinterConnectionParams): IDeviceConnection =
         suspendCancellableCoroutine { cont ->
+            val newConnection: IDeviceConnection
+            val connectionTargetInfo: String
             try {
-                val newConnection: IDeviceConnection
-                val connectionTargetInfo: String
-
                 when (printer.connectionType) {
                     PosPrinterConnectionType.USB -> {
                         val usbParams = printer.usbParams ?: throw Exception("Missing USB params")
@@ -896,6 +895,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     if (code == POSConnect.CONNECT_SUCCESS) {
                         cont.resume(newConnection)
                     } else {
+                        newConnection?.close()
                         cont.resumeWithException(Exception("Connection failed with code $code"))
                     }
                 }
