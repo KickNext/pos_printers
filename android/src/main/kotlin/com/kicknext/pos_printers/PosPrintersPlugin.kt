@@ -17,6 +17,8 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.posprinter.*
 import net.posprinter.model.AlgorithmType
 import java.net.Inet4Address
@@ -31,6 +33,13 @@ import kotlin.coroutines.suspendCoroutine
 
 /** PosPrintersPlugin */
 class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
+
+    private object PrinterLocks {
+        private val map = mutableMapOf<String, Mutex>()
+        fun mutexFor(id: String): Mutex = synchronized(this) {
+            map.getOrPut(id) { Mutex() }
+        }
+    }
 
     private lateinit var applicationContext: Context
     private val posUdpNet = ExtendPosUdpNet()
@@ -1048,28 +1057,44 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParams,
         callback: (Result<StatusResult>) -> Unit
     ) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val connection = getPrinterConnectionSuspending(printer)
-                val pos = POSPrinter(connection)
-                pos.initializePrinter() // Ensure printer is in ESC/POS mode before status check
-                pos.printerStatus { status ->
-                    val text = mapStatusCodeToString(status) // Use helper function
-                    // Check if status indicates an error state based on the text mapping
-                    val isErrorStatus =
-                        status < POSConst.STS_NORMAL || status == POSConst.STS_PRINTER_ERR
+        pluginScope.launch {
+            val id = when (printer.connectionType) {
+                PosPrinterConnectionType.USB    -> "${printer.usbParams!!.vendorId}:${printer.usbParams.productId}"
+                PosPrinterConnectionType.NETWORK -> printer.networkParams!!.ipAddress
+            }
+            val lock = PrinterLocks.mutexFor(id)
+            lock.withLock {
+                try {
+                    val connection = getPrinterConnectionSuspending(printer)
+                    val pos = POSPrinter(connection)
+                    pos.initializePrinter()
+
+                    val status = withTimeout(1_500) {
+                        suspendCancellableCoroutine<Int> { cont ->
+                            pos.printerStatus { s ->
+                                if (cont.isActive) cont.resume(s)
+                            }
+                        }
+                    }
+
                     connection.close()
-                    if (isErrorStatus) {
+
+                    val text = mapStatusCodeToString(status)
+                    if (status < POSConst.STS_NORMAL || status == POSConst.STS_PRINTER_ERR) {
                         callback(Result.failure(Exception(text)))
                     } else {
-                        callback(Result.success(StatusResult(success = true, status = text)))
+                        callback(Result.success(StatusResult(true, text)))
                     }
+                } catch (e: TimeoutCancellationException) {
+                    callback(Result.failure(Exception("Status request timed-out")))
+                } catch (e: Throwable) {
+                    callback(Result.failure(Exception("Get status exception: ${e.message}")))
                 }
-            } catch (platformError: Throwable) {
-                callback(Result.failure(Exception("Get status exception: ${platformError.message}")))
             }
+
         }
     }
+
 
     override fun getPrinterSN(
         printer: PrinterConnectionParams,
