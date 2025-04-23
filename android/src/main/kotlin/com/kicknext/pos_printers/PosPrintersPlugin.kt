@@ -169,59 +169,79 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         suspendCancellableCoroutine { cont ->
             val connection: IDeviceConnection
             val target: String
+
             try {
+                // Определение типа соединения и инициализация устройства
                 when (connectionParams.connectionType) {
                     PosPrinterConnectionType.USB -> {
-                        val usb = findUsbDevice(
-                            connectionParams.usbParams!!.vendorId.toInt(),
-                            connectionParams.usbParams.productId.toInt(),
-                            connectionParams.usbParams.usbSerialNumber
-                        )
-                            ?: throw Exception("USB device not found")
+                        val usbParams = connectionParams.usbParams
+                            ?: throw IllegalArgumentException("USB params are missing")
+                        val usbDevice = findUsbDevice(
+                            usbParams.vendorId.toInt(),
+                            usbParams.productId.toInt(),
+                            usbParams.usbSerialNumber
+                        ) ?: throw Exception("USB device not found")
                         connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
-                        target = usb.deviceName
+                        target = usbDevice.deviceName
                     }
+
                     PosPrinterConnectionType.NETWORK -> {
+                        val networkParams = connectionParams.networkParams
+                            ?: throw IllegalArgumentException("Network params are missing")
                         connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-                        target = connectionParams.networkParams!!.ipAddress
+                        target = networkParams.ipAddress
+                    }
+
+                    else -> {
+                        cont.resume(null)
+                        return@suspendCancellableCoroutine
                     }
                 }
             } catch (e: Exception) {
                 cont.resume(null)
                 return@suspendCancellableCoroutine
             }
-            // connect listener
+
+            // Listener подключения
             val listener = IConnectListener { code, _, _ ->
-                if (code == POSConnect.CONNECT_SUCCESS) {
-                    // probe ESC/POS
-                    try {
-                        val pos = POSPrinter(connection)
-                        pos.initializePrinter()
-                        pos.printerStatus { status ->
-                            if (status >= POSConst.STS_NORMAL) {
-                                connection.close()
-                                cont.resume(PrinterLanguage.ESC)
-                            } else {
-                                // probe ZPL
-                                val zpl = ZPLPrinter(connection)
-                                zpl.printerStatus { zcode ->
-                                    val type = if (zcode in 0..0x80) PrinterLanguage.ZPL else null
+                if (code != POSConnect.CONNECT_SUCCESS) {
+                    cont.resume(null)
+                    return@IConnectListener
+                }
+
+                try {
+                    val posPrinter = POSPrinter(connection)
+                    posPrinter.initializePrinter()
+
+                    posPrinter.printerStatus { escStatus ->
+                        if (escStatus >= POSConst.STS_NORMAL) {
+                            connection.close()
+                            cont.resume(PrinterLanguage.ESC)
+                        } else {
+                            try {
+                                val zplPrinter = ZPLPrinter(connection)
+                                zplPrinter.printerStatus { zplCode ->
+                                    val type = if (zplCode in 0..0x80) PrinterLanguage.ZPL else null
                                     connection.close()
                                     cont.resume(type)
                                 }
+                            } catch (zplEx: Exception) {
+                                connection.close()
+                                cont.resume(null)
                             }
                         }
-                    } catch (ex: Exception) {
-                        connection.close()
-                        cont.resume(null)
                     }
-                } else {
-                    // could not connect
+                } catch (ex: Exception) {
+                    connection.close()
                     cont.resume(null)
                 }
             }
-            // initiate connect
-            connection.connect(target, listener)
+
+            try {
+                connection.connect(target, listener)
+            } catch (e: Exception) {
+                cont.resume(null)
+            }
         }
 
     override fun findPrinters(filter: PrinterDiscoveryFilter?) {
