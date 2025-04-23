@@ -907,7 +907,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
                 newConnection.connect(connectionTargetInfo, listener)
             } catch (e: Throwable) {
-                cont.resumeWithException(e)
+                if (resumed.compareAndSet(false, true)) {
+                    cont.resumeWithException(e)
+                }
             }
         }
 
