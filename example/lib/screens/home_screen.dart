@@ -429,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  VerticalDivider(width: 1, thickness: 1),
+                  const VerticalDivider(width: 1, thickness: 1),
                   Expanded(
                     flex: 1,
                     child: Card(

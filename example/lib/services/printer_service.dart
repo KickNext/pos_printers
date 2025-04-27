@@ -76,20 +76,30 @@ class PrinterService {
     }
     // Simple ZPL sample
     const commands = '''^XA
-  ^PW673
-  ^LL304            
-  ^CF0,30              
-  ^FO20,20^FDLuna Bloom Candle^FS
-  ^CF0,40             
-  ^FO20,60^FD\$24.99^FS
-  ^FO340,20
-  ^BQN,2,4           
-  ^FDLA,https://example.com/luna-bloom-candle^FS
-  ^XZ\r\n''';
+^PW457
+^CF0,32
+^FO20,20,0
+^FB250,3,0,L,0^FDItem name  long lo long long^FS
+^CF0,30,30
+^FO20,130^FD\$250010.34^FS
+^FO20,140^GB200,3,3^FS
+^CF0,50,50
+^FO20,160,0^FD\$250006.34 /kg^FS
+^FO437,20,1
+^CF0,14
+^FB150,1,0,R,0^FD0000000000000000^FS
+^FO437,35,1
+^BQN,2,5,L
+^FDLA,000000000000000000^FS
+^CF0,20
+^FO20,220^FDStore name^FS
+^FO437,220,1
+^FB150,1,0,R,0^FD01/01/2025^FS
+^XZ\r\n''';
     await _posPrintersManager.printZplRawData(
       item.connectionParams,
       Uint8List.fromList(commands.codeUnits),
-      673,
+      457,
     );
   }
 
@@ -104,8 +114,8 @@ class PrinterService {
       barcodeData: '123456789012',
       unit: 'pcs',
     );
-    const widthDots = 673; // 58 mm at 8 dots/mm
-    const heightDots = 449; // 40 mm at 8 dots/mm
+    const widthDots = 457; // 58 mm at 8 dots/mm
+    const heightDots = 254; // 40 mm at 8 dots/mm
     await _posPrintersManager.printZplHtml(
       item.connectionParams,
       html,

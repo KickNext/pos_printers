@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import net.posprinter.*
 import net.posprinter.model.AlgorithmType
+import net.posprinter.posprinterface.IDataCallback
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -221,28 +222,22 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
                 try {
                     val posPrinter = POSPrinter(connection)
-                    posPrinter.initializePrinter()
-
                     posPrinter.printerStatus { escStatus ->
                         if (escStatus >= POSConst.STS_NORMAL) {
-                            connection.close()
                             if (resumed.compareAndSet(false, true)) cont.resume(PrinterLanguage.ESC)
                         } else {
                             try {
                                 val zplPrinter = ZPLPrinter(connection)
                                 zplPrinter.printerStatus { zplCode ->
                                     val type = if (zplCode in 0..0x80) PrinterLanguage.ZPL else null
-                                    connection.close()
                                     if (resumed.compareAndSet(false, true)) cont.resume(type)
                                 }
                             } catch (zplEx: Exception) {
-                                connection.close()
                                 if (resumed.compareAndSet(false, true)) cont.resume(null)
                             }
                         }
                     }
                 } catch (ex: Exception) {
-                    connection.close()
                     if (resumed.compareAndSet(false, true)) cont.resume(null)
                 }
             }
@@ -986,7 +981,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 val curPrinter = POSPrinter(connection)
                 curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
                 curPrinter.sendData(data)
-                connection.close()
                 callback(Result.success(Unit))
             } catch (platformError: Throwable) {
                 Log.e(
@@ -1020,7 +1014,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 curPrinter.initializePrinter() // Ensure printer is in ESC/POS mode
                 curPrinter.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
                 curPrinter.cutHalfAndFeed(1)
-                connection.close()
                 callback(Result.success(Unit))
             } catch (platformError: Throwable) {
                 Log.e(
@@ -1040,7 +1033,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 val curPrinter = POSPrinter(connection)
                 curPrinter.initializePrinter()
                 curPrinter.openCashBox(POSConst.PIN_TWO)
-                connection.close()
                 callback(Result.success(Unit))
             } catch (platformError: Throwable) {
                 Log.e(
@@ -1076,8 +1068,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                             }
                         }
                     }
-
-                    connection.close()
 
                     val text = mapStatusCodeToString(status)
                     if (status < POSConst.STS_NORMAL || status == POSConst.STS_PRINTER_ERR) {
@@ -1115,7 +1105,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                             "Error decoding SN"
                         } // Improved fallback
                     }
-                    connection.close()
                     if (snString.isEmpty() || snString == "Error decoding SN") {
                         callback(Result.failure(Exception("Failed to decode serial number: $snString")))
                     } else {
@@ -1346,9 +1335,14 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val connection = getPrinterConnectionSuspending(printer)
+                connection.setSendCallback( {
+                    Log.d("POSPrinters", "Command size: ${labelCommands.size}")
+                    Log.d("POSPrinters", "Send callback: $it")
+                }
+                )
+                connection.isConnect()
                 val zpl = ZPLPrinter(connection)
                 zpl.sendData(labelCommands)
-                connection.close()
                 callback(Result.success(Unit))
             } catch (e: Throwable) {
                 Log.e("POSPrinters", "Print failed: ${e.message}", e)
@@ -1382,7 +1376,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             zpl.addStart()
             zpl.printBmpCompress(0, 0, bmp, width.toInt(), AlgorithmType.Dithering)
             zpl.addEnd()
-            connection.close()
             callback(Result.success(Unit))
         } catch (e: Throwable) {
             Log.e("POSPrinters", "Exception during printLabelHTML: ${e.message}", e)
@@ -1402,7 +1395,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     val zpl = ZPLPrinter(connection)
                     zpl.printerStatus(500, { code ->
                         val success = code == 0
-                        connection.close()
                         val result = if (success) {
                             ZPLStatusResult(true, code.toLong(), null)
                         } else {
