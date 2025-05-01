@@ -207,13 +207,13 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         callback: (Result<Unit>) -> Unit
     ) {
         try {
+            val content = WebViewContent.html(html)
+            val bitmap =
+                Html2Bitmap.Builder().setBitmapWidth(width.toInt()).setContent(content)
+                    .setTextZoom(100).setContext(applicationContext).build().bitmap
             val (connection, target) = preparePrinterConnection(printer)
             handlePrinterConnection(printer, connection, target) {
                 try {
-                    val content = WebViewContent.html(html)
-                    val bitmap =
-                        Html2Bitmap.Builder().setBitmapWidth(width.toInt()).setContent(content)
-                            .setTextZoom(100).setContext(applicationContext).build().bitmap
                     val curPrinter = POSPrinter(connection)
                     curPrinter.initializePrinter()
                     curPrinter.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
