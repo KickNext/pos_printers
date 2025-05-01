@@ -71,56 +71,26 @@ enum class PrinterLanguage(val raw: Int) {
   }
 }
 
-enum class DiscoveryConnectionType(val raw: Int) {
-  USB(0),
-  SDK(1),
-  TCP(2);
-
-  companion object {
-    fun ofRaw(raw: Int): DiscoveryConnectionType? {
-      return values().firstOrNull { it.raw == raw }
-    }
-  }
-}
-
 /** Generated class from Pigeon that represents data sent in messages. */
-data class PrinterDiscoveryFilter (
-  val languages: List<PrinterLanguage>? = null,
-  val connectionTypes: List<DiscoveryConnectionType>? = null
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): PrinterDiscoveryFilter {
-      val languages = pigeonVar_list[0] as List<PrinterLanguage>?
-      val connectionTypes = pigeonVar_list[1] as List<DiscoveryConnectionType>?
-      return PrinterDiscoveryFilter(languages, connectionTypes)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      languages,
-      connectionTypes,
-    )
-  }
-}
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class PrinterConnectionParams (
+data class PrinterConnectionParamsDTO (
+  val id: String,
   val connectionType: PosPrinterConnectionType,
   val usbParams: UsbParams? = null,
   val networkParams: NetworkParams? = null
 )
  {
   companion object {
-    fun fromList(pigeonVar_list: List<Any?>): PrinterConnectionParams {
-      val connectionType = pigeonVar_list[0] as PosPrinterConnectionType
-      val usbParams = pigeonVar_list[1] as UsbParams?
-      val networkParams = pigeonVar_list[2] as NetworkParams?
-      return PrinterConnectionParams(connectionType, usbParams, networkParams)
+    fun fromList(pigeonVar_list: List<Any?>): PrinterConnectionParamsDTO {
+      val id = pigeonVar_list[0] as String
+      val connectionType = pigeonVar_list[1] as PosPrinterConnectionType
+      val usbParams = pigeonVar_list[2] as UsbParams?
+      val networkParams = pigeonVar_list[3] as NetworkParams?
+      return PrinterConnectionParamsDTO(id, connectionType, usbParams, networkParams)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
+      id,
       connectionType,
       usbParams,
       networkParams,
@@ -132,7 +102,7 @@ data class PrinterConnectionParams (
 data class UsbParams (
   val vendorId: Long,
   val productId: Long,
-  val usbSerialNumber: String? = null,
+  val serialNumber: String? = null,
   val manufacturer: String? = null,
   val productName: String? = null
 )
@@ -141,17 +111,17 @@ data class UsbParams (
     fun fromList(pigeonVar_list: List<Any?>): UsbParams {
       val vendorId = pigeonVar_list[0] as Long
       val productId = pigeonVar_list[1] as Long
-      val usbSerialNumber = pigeonVar_list[2] as String?
+      val serialNumber = pigeonVar_list[2] as String?
       val manufacturer = pigeonVar_list[3] as String?
       val productName = pigeonVar_list[4] as String?
-      return UsbParams(vendorId, productId, usbSerialNumber, manufacturer, productName)
+      return UsbParams(vendorId, productId, serialNumber, manufacturer, productName)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
       vendorId,
       productId,
-      usbSerialNumber,
+      serialNumber,
       manufacturer,
       productName,
     )
@@ -265,23 +235,20 @@ data class StringResult (
 }
 
 /** Generated class from Pigeon that represents data sent in messages. */
-data class DiscoveredPrinterDTO (
-  val id: String,
-  val printerLanguage: PrinterLanguage? = null,
-  val connectionParams: PrinterConnectionParams
+data class CheckPrinterLanguageResponse (
+  val printerLanguage: PrinterLanguage,
+  val connectionParams: PrinterConnectionParamsDTO
 )
  {
   companion object {
-    fun fromList(pigeonVar_list: List<Any?>): DiscoveredPrinterDTO {
-      val id = pigeonVar_list[0] as String
-      val printerLanguage = pigeonVar_list[1] as PrinterLanguage?
-      val connectionParams = pigeonVar_list[2] as PrinterConnectionParams
-      return DiscoveredPrinterDTO(id, printerLanguage, connectionParams)
+    fun fromList(pigeonVar_list: List<Any?>): CheckPrinterLanguageResponse {
+      val printerLanguage = pigeonVar_list[0] as PrinterLanguage
+      val connectionParams = pigeonVar_list[1] as PrinterConnectionParamsDTO
+      return CheckPrinterLanguageResponse(printerLanguage, connectionParams)
     }
   }
   fun toList(): List<Any?> {
     return listOf(
-      id,
       printerLanguage,
       connectionParams,
     )
@@ -301,48 +268,38 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         }
       }
       131.toByte() -> {
-        return (readValue(buffer) as Long?)?.let {
-          DiscoveryConnectionType.ofRaw(it.toInt())
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PrinterConnectionParamsDTO.fromList(it)
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PrinterDiscoveryFilter.fromList(it)
+          UsbParams.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          PrinterConnectionParams.fromList(it)
+          NetworkParams.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          UsbParams.fromList(it)
+          ZPLStatusResult.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NetworkParams.fromList(it)
+          StatusResult.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ZPLStatusResult.fromList(it)
+          StringResult.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          StatusResult.fromList(it)
-        }
-      }
-      138.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          StringResult.fromList(it)
-        }
-      }
-      139.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          DiscoveredPrinterDTO.fromList(it)
+          CheckPrinterLanguageResponse.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -358,40 +315,32 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         stream.write(130)
         writeValue(stream, value.raw)
       }
-      is DiscoveryConnectionType -> {
+      is PrinterConnectionParamsDTO -> {
         stream.write(131)
-        writeValue(stream, value.raw)
-      }
-      is PrinterDiscoveryFilter -> {
-        stream.write(132)
-        writeValue(stream, value.toList())
-      }
-      is PrinterConnectionParams -> {
-        stream.write(133)
         writeValue(stream, value.toList())
       }
       is UsbParams -> {
-        stream.write(134)
+        stream.write(132)
         writeValue(stream, value.toList())
       }
       is NetworkParams -> {
-        stream.write(135)
+        stream.write(133)
         writeValue(stream, value.toList())
       }
       is ZPLStatusResult -> {
-        stream.write(136)
+        stream.write(134)
         writeValue(stream, value.toList())
       }
       is StatusResult -> {
-        stream.write(137)
+        stream.write(135)
         writeValue(stream, value.toList())
       }
       is StringResult -> {
-        stream.write(138)
+        stream.write(136)
         writeValue(stream, value.toList())
       }
-      is DiscoveredPrinterDTO -> {
-        stream.write(139)
+      is CheckPrinterLanguageResponse -> {
+        stream.write(137)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -402,17 +351,20 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
 
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface POSPrintersApi {
-  fun findPrinters(filter: PrinterDiscoveryFilter?)
-  fun getPrinterStatus(printer: PrinterConnectionParams, callback: (Result<StatusResult>) -> Unit)
-  fun getPrinterSN(printer: PrinterConnectionParams, callback: (Result<StringResult>) -> Unit)
-  fun openCashBox(printer: PrinterConnectionParams, callback: (Result<Unit>) -> Unit)
-  fun printHTML(printer: PrinterConnectionParams, html: String, width: Long, callback: (Result<Unit>) -> Unit)
-  fun printData(printer: PrinterConnectionParams, data: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
-  fun setNetSettingsToPrinter(printer: PrinterConnectionParams, netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
+  fun startDiscoverAllUsbPrinters(callback: (Result<Unit>) -> Unit)
+  fun startDiscoveryXprinterSDKNetworkPrinters(callback: (Result<Unit>) -> Unit)
+  fun startDiscoveryTCPNetworkPrinters(port: Long, callback: (Result<Unit>) -> Unit)
+  fun checkPrinterLanguage(printer: PrinterConnectionParamsDTO, callback: (Result<CheckPrinterLanguageResponse>) -> Unit)
+  fun getPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<StatusResult>) -> Unit)
+  fun getPrinterSN(printer: PrinterConnectionParamsDTO, callback: (Result<StringResult>) -> Unit)
+  fun openCashBox(printer: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
+  fun printHTML(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
+  fun printData(printer: PrinterConnectionParamsDTO, data: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
+  fun setNetSettingsToPrinter(printer: PrinterConnectionParamsDTO, netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
   fun configureNetViaUDP(netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
-  fun printZplRawData(printer: PrinterConnectionParams, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
-  fun printZplHtml(printer: PrinterConnectionParams, html: String, width: Long, height: Long, callback: (Result<Unit>) -> Unit)
-  fun getZPLPrinterStatus(printer: PrinterConnectionParams, callback: (Result<ZPLStatusResult>) -> Unit)
+  fun printZplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
+  fun printZplHtml(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
+  fun getZPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<ZPLStatusResult>) -> Unit)
 
   companion object {
     /** The codec used by POSPrintersApi. */
@@ -424,18 +376,77 @@ interface POSPrintersApi {
     fun setUp(binaryMessenger: BinaryMessenger, api: POSPrintersApi?, messageChannelSuffix: String = "") {
       val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
       run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.findPrinters$separatedMessageChannelSuffix", codec)
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoverAllUsbPrinters$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.startDiscoverAllUsbPrinters{ result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryXprinterSDKNetworkPrinters$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            api.startDiscoveryXprinterSDKNetworkPrinters{ result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryTCPNetworkPrinters$separatedMessageChannelSuffix", codec, taskQueue)
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val filterArg = args[0] as PrinterDiscoveryFilter?
-            val wrapped: List<Any?> = try {
-              api.findPrinters(filterArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              wrapError(exception)
+            val portArg = args[0] as Long
+            api.startDiscoveryTCPNetworkPrinters(portArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
             }
-            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.checkPrinterLanguage$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            api.checkPrinterLanguage(printerArg) { result: Result<CheckPrinterLanguageResponse> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)
@@ -447,7 +458,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             api.getPrinterStatus(printerArg) { result: Result<StatusResult> ->
               val error = result.exceptionOrNull()
               if (error != null) {
@@ -468,7 +479,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             api.getPrinterSN(printerArg) { result: Result<StringResult> ->
               val error = result.exceptionOrNull()
               if (error != null) {
@@ -489,7 +500,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             api.openCashBox(printerArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
@@ -509,7 +520,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             val htmlArg = args[1] as String
             val widthArg = args[2] as Long
             api.printHTML(printerArg, htmlArg, widthArg) { result: Result<Unit> ->
@@ -531,7 +542,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             val dataArg = args[1] as ByteArray
             val widthArg = args[2] as Long
             api.printData(printerArg, dataArg, widthArg) { result: Result<Unit> ->
@@ -553,7 +564,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             val netSettingsArg = args[1] as NetworkParams
             api.setNetSettingsToPrinter(printerArg, netSettingsArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
@@ -594,7 +605,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             val labelCommandsArg = args[1] as ByteArray
             val widthArg = args[2] as Long
             api.printZplRawData(printerArg, labelCommandsArg, widthArg) { result: Result<Unit> ->
@@ -616,11 +627,10 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             val htmlArg = args[1] as String
             val widthArg = args[2] as Long
-            val heightArg = args[3] as Long
-            api.printZplHtml(printerArg, htmlArg, widthArg, heightArg) { result: Result<Unit> ->
+            api.printZplHtml(printerArg, htmlArg, widthArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
@@ -639,7 +649,7 @@ interface POSPrintersApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParams
+            val printerArg = args[0] as PrinterConnectionParamsDTO
             api.getZPLPrinterStatus(printerArg) { result: Result<ZPLStatusResult> ->
               val error = result.exceptionOrNull()
               if (error != null) {
@@ -669,13 +679,7 @@ class PrinterDiscoveryEventsApi(private val binaryMessenger: BinaryMessenger, pr
       PosPrintersPluginAPIPigeonCodec()
     }
   }
-  /**
-   * Вызывается при обнаружении нового (уникального) принтера.
-   * `printer` содержит информацию о найденном принтере. Используйте стабильные
-   * идентификаторы из него (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`)
-   * для создания `PrinterConnectionParams` при вызове `connectPrinter`.
-   */
-  fun onPrinterFound(printerArg: DiscoveredPrinterDTO, callback: (Result<Unit>) -> Unit)
+  fun onPrinterFound(printerArg: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound$separatedMessageChannelSuffix"
@@ -692,17 +696,12 @@ class PrinterDiscoveryEventsApi(private val binaryMessenger: BinaryMessenger, pr
       } 
     }
   }
-  /**
-   * Вызывается по завершении всего процесса поиска.
-   * `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).
-   * `errorMessage` содержит сообщение об ошибке, если `success` = false.
-   */
-  fun onDiscoveryComplete(successArg: Boolean, errorMessageArg: String?, callback: (Result<Unit>) -> Unit)
+  fun onDiscoveryComplete(successArg: Boolean, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(successArg, errorMessageArg)) {
+    channel.send(listOf(successArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
@@ -714,7 +713,24 @@ class PrinterDiscoveryEventsApi(private val binaryMessenger: BinaryMessenger, pr
       } 
     }
   }
-  fun onPrinterAttached(printerArg: DiscoveredPrinterDTO, callback: (Result<Unit>) -> Unit)
+  fun onDiscoveryError(errorMessageArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryError$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(errorMessageArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(createConnectionError(channelName)))
+      } 
+    }
+  }
+  fun onPrinterAttached(printerArg: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached$separatedMessageChannelSuffix"
@@ -731,12 +747,12 @@ class PrinterDiscoveryEventsApi(private val binaryMessenger: BinaryMessenger, pr
       } 
     }
   }
-  fun onPrinterDetached(idArg: String, callback: (Result<Unit>) -> Unit)
+  fun onPrinterDetached(printerArg: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-    channel.send(listOf(idArg)) {
+    channel.send(listOf(printerArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

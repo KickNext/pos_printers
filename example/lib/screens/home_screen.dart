@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _foundScrollController = ScrollController();
 
   bool _isSearching = false;
-  StreamSubscription<DiscoveredPrinterDTO>? _searchSubscription;
+  StreamSubscription<PrinterConnectionParamsDTO>? _searchSubscription;
   StreamSubscription<PrinterConnectionEvent>? _connectionEventsSub;
 
   @override
@@ -55,9 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _connectionEventsSub = _printerService.connectionEvents.listen((event) {
       if (!mounted) return;
       final savedIdx =
-          _savedPrinters.indexWhere((p) => p.discoveredPrinter.id == event.id);
+          _savedPrinters.indexWhere((p) => p.connectionParams.id == event.id);
       final foundIdx =
-          _foundPrinters.indexWhere((p) => p.discoveredPrinter.id == event.id);
+          _foundPrinters.indexWhere((p) => p.connectionParams.id == event.id);
       if (event.type == PrinterConnectionEventType.attached) {
         _snackBarHelper.showInfoSnackbar('USB printer attached: ${event.id}');
         if (savedIdx != -1) {
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
         } else if (foundIdx == -1 && event.printer != null) {
           setState(() {
             _foundPrinters.add(PrinterItem(
-                discoveredPrinter: event.printer!,
+                connectionParams: event.printer!,
                 isConnected: true,
                 isSaved: false));
           });
@@ -113,11 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _searchSubscription = stream.listen(
         (discoveredPrinter) {
           final exists = _foundPrinters.any((p) => _printerService.samePrinter(
-              p.discoveredPrinter, discoveredPrinter));
+              p.connectionParams, discoveredPrinter));
           if (!exists && mounted) {
             setState(() {
               _foundPrinters
-                  .add(PrinterItem(discoveredPrinter: discoveredPrinter));
+                  .add(PrinterItem(connectionParams: discoveredPrinter));
             });
           }
         },
@@ -158,11 +158,11 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       if (mounted) {
         final alreadyIn = _savedPrinters.any((p) => _printerService.samePrinter(
-            p.discoveredPrinter, item.discoveredPrinter));
+            p.connectionParams, item.connectionParams));
         if (!alreadyIn) {
           setState(() {
             _foundPrinters.removeWhere((p) => _printerService.samePrinter(
-                p.discoveredPrinter, item.discoveredPrinter));
+                p.connectionParams, item.connectionParams));
             _savedPrinters.add(item);
           });
           _snackBarHelper.showSuccessSnackbar('Connected successfully!');
@@ -179,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _savedPrinters.removeWhere((p) => _printerService.samePrinter(
-              p.discoveredPrinter, item.discoveredPrinter));
+              p.connectionParams, item.connectionParams));
         });
         _snackBarHelper.showInfoSnackbar('Disconnected.');
       }
@@ -193,7 +193,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final result = await _printerService.getPrinterStatus(item);
       debugPrint(
-          'Status for ${item.discoveredPrinter.id} => success=${result.success}, status=${result.status}, error=${result.errorMessage}');
+          'Status for ${item.connectionParams.id} => success=${result.success}, status=${result.status}, error=${result.errorMessage}');
       if (mounted) {
         if (result.success) {
           _snackBarHelper.showInfoSnackbar('Status: ${result.status ?? "N/A"}');
@@ -248,8 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Configure network settings via UDP broadcast
   Future<void> _configureNetViaUDP(
       PrinterItem item, NetworkParams settings) async {
-    final mac =
-        item.discoveredPrinter.connectionParams.networkParams?.macAddress;
+    final mac = item.connectionParams.networkParams?.macAddress;
     if (mac == null || mac.isEmpty) {
       _snackBarHelper.showErrorSnackbar(
           'MAC Address not found for this printer. Cannot configure via UDP.');
@@ -275,7 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Pre-fill with current printer IP if connected and setting via connection
     String? initialIp;
     if (!isUdp &&
-        item.discoveredPrinter.connectionParams.connectionType ==
+        item.connectionParams.connectionType ==
             PosPrinterConnectionType.network) {
       initialIp = item.connectionParams.networkParams?.ipAddress;
     }
@@ -318,6 +317,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _checkLanguage(PrinterItem item) async {
+    try {
+      setState(() {
+        item.isBusy = true;
+      }); // Update UI to show busy state
+      await _printerService.checkPrinterLanguage(item);
+      setState(() {
+        item.isBusy = false; // Reset busy state after checking
+      });
+    } catch (e) {
+      _snackBarHelper.showErrorSnackbar('Get printer language error: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isWide = MediaQuery.of(context).size.width > 900;
@@ -333,28 +346,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 tooltip: 'Print test on all connected',
                 onPressed: () async {
                   for (final p in _connectedPrinters) {
-                    if (p.discoveredPrinter.printerLanguage ==
-                        PrinterLanguage.zpl) {
-                      // ZPL label printer
-                      try {
-                        await _printerService.printLabelHtml(p);
-                        await Future.delayed(const Duration(milliseconds: 500));
-                        await _printerService.printZplRawData(p);
-                      } catch (e) {
-                        _snackBarHelper
-                            .showErrorSnackbar('Label print error: $e');
-                      }
-                    } else {
-                      // ESC/POS receipt printer
-                      try {
-                        await _printEscHtml(p);
-                        await Future.delayed(const Duration(milliseconds: 500));
-                        await _printEscPosData(p);
-                      } catch (e) {
-                        _snackBarHelper
-                            .showErrorSnackbar('ESC/POS print error: $e');
-                      }
-                    }
+                    // if (p.discoveredPrinter.printerLanguage ==
+                    //     PrinterLanguage.zpl) {
+                    //   // ZPL label printer
+                    //   try {
+                    //     await _printerService.printLabelHtml(p);
+                    //     await Future.delayed(const Duration(milliseconds: 500));
+                    //     await _printerService.printZplRawData(p);
+                    //   } catch (e) {
+                    //     _snackBarHelper
+                    //         .showErrorSnackbar('Label print error: $e');
+                    //   }
+                    // } else {
+                    //   // ESC/POS receipt printer
+                    //   try {
+                    //     await _printEscHtml(p);
+                    //     await Future.delayed(const Duration(milliseconds: 500));
+                    //     await _printEscPosData(p);
+                    //   } catch (e) {
+                    //     _snackBarHelper
+                    //         .showErrorSnackbar('ESC/POS print error: $e');
+                    //   }
+                    // }
                   }
                   if (mounted) {
                     _snackBarHelper.showSuccessSnackbar('Print jobs sent.');
@@ -462,9 +475,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                         return FoundPrinterTile(
                                           item: item,
                                           onAdd: () => _connectToPrinter(item),
-                                          onConfigureUdp: item
-                                                      .discoveredPrinter
-                                                      .connectionParams
+                                          onCheckLanguage: () =>
+                                              _checkLanguage(item),
+                                          onConfigureUdp: item.connectionParams
                                                       .connectionType ==
                                                   PosPrinterConnectionType
                                                       .network
@@ -543,14 +556,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return FoundPrinterTile(
                                   item: item,
                                   onAdd: () => _connectToPrinter(item),
-                                  onConfigureUdp: item
-                                              .discoveredPrinter
-                                              .connectionParams
-                                              .connectionType ==
-                                          PosPrinterConnectionType.network
-                                      ? () => _showNetworkSettingsDialog(
-                                          item: item, isUdp: true)
-                                      : null,
+                                  onCheckLanguage: () => _checkLanguage(item),
+                                  onConfigureUdp:
+                                      item.connectionParams.connectionType ==
+                                              PosPrinterConnectionType.network
+                                          ? () => _showNetworkSettingsDialog(
+                                              item: item, isUdp: true)
+                                          : null,
                                 );
                               },
                             ),

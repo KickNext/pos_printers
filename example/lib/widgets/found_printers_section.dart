@@ -8,6 +8,7 @@ class FoundPrintersSection extends StatelessWidget {
   final bool isSearching;
   final Function(PrinterItem) onConnect;
   final Function(PrinterItem) onConfigureUdp;
+  final Function(PrinterItem) onCheckLanguage;
 
   const FoundPrintersSection({
     super.key,
@@ -15,6 +16,7 @@ class FoundPrintersSection extends StatelessWidget {
     required this.isSearching,
     required this.onConnect,
     required this.onConfigureUdp,
+    required this.onCheckLanguage,
   });
 
   @override
@@ -42,6 +44,7 @@ class FoundPrintersSection extends StatelessWidget {
                       item: item,
                       onAdd: () => onConnect(item),
                       onConfigureUdp: () => onConfigureUdp(item),
+                      onCheckLanguage: () => onCheckLanguage(item),
                     );
                   },
                 ),

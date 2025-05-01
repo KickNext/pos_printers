@@ -11,18 +11,9 @@ import 'package:pigeon/pigeon.dart';
     package: 'com.kicknext.pos_printers.gen',
   ),
 ))
-
 enum PosPrinterConnectionType {
   usb,
   network,
-}
-
-class PrinterDiscoveryFilter {
-  final List<PrinterLanguage>? languages;
-  final List<DiscoveryConnectionType>? connectionTypes;
-
-  PrinterDiscoveryFilter(
-      {required this.languages, required this.connectionTypes});
 }
 
 enum PrinterLanguage {
@@ -30,18 +21,14 @@ enum PrinterLanguage {
   zpl;
 }
 
-enum DiscoveryConnectionType {
-  usb,
-  sdk,
-  tcp;
-}
-
-class PrinterConnectionParams {
+class PrinterConnectionParamsDTO {
+  final String id;
   final PosPrinterConnectionType connectionType;
   final UsbParams? usbParams;
   final NetworkParams? networkParams;
 
-  PrinterConnectionParams({
+  PrinterConnectionParamsDTO({
+    required this.id,
     required this.connectionType,
     required this.usbParams,
     required this.networkParams,
@@ -51,14 +38,14 @@ class PrinterConnectionParams {
 class UsbParams {
   final int vendorId;
   final int productId;
-  final String? usbSerialNumber;
+  final String? serialNumber;
   final String? manufacturer; // Может быть получен при обнаружении (USB)
   final String? productName; // Может быть получен при обнаружении (USB)
 
   UsbParams({
     required this.vendorId,
     required this.productId,
-    required this.usbSerialNumber,
+    required this.serialNumber,
     required this.manufacturer,
     required this.productName,
   });
@@ -106,13 +93,11 @@ class StringResult {
   StringResult({required this.success, this.errorMessage, this.value});
 }
 
-class DiscoveredPrinterDTO {
-  final String id;
-  final PrinterLanguage? printerLanguage;
-  final PrinterConnectionParams connectionParams;
+class CheckPrinterLanguageResponse {
+  final PrinterLanguage printerLanguage;
+  final PrinterConnectionParamsDTO connectionParams;
 
-  DiscoveredPrinterDTO({
-    required this.id,
+  CheckPrinterLanguageResponse({
     required this.printerLanguage,
     required this.connectionParams,
   });
@@ -120,32 +105,48 @@ class DiscoveredPrinterDTO {
 
 @HostApi()
 abstract class POSPrintersApi {
-  void findPrinters(PrinterDiscoveryFilter? filter);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  StatusResult getPrinterStatus(PrinterConnectionParams printer);
+  void startDiscoverAllUsbPrinters();
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  StringResult getPrinterSN(PrinterConnectionParams printer);
+  void startDiscoveryXprinterSDKNetworkPrinters();
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void openCashBox(PrinterConnectionParams printer);
+  void startDiscoveryTCPNetworkPrinters(int port);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void printHTML(PrinterConnectionParams printer, String html, int width);
+  CheckPrinterLanguageResponse checkPrinterLanguage(
+      PrinterConnectionParamsDTO printer);
 
   @async
-  @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
-  void printData(PrinterConnectionParams printer, Uint8List data, int width);
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  StatusResult getPrinterStatus(PrinterConnectionParamsDTO printer);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  StringResult getPrinterSN(PrinterConnectionParamsDTO printer);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void openCashBox(PrinterConnectionParamsDTO printer);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void printHTML(PrinterConnectionParamsDTO printer, String html, int width);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void printData(PrinterConnectionParamsDTO printer, Uint8List data, int width);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void setNetSettingsToPrinter(
-      PrinterConnectionParams printer, NetworkParams netSettings);
+      PrinterConnectionParamsDTO printer, NetworkParams netSettings);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
@@ -154,7 +155,7 @@ abstract class POSPrintersApi {
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
   void printZplRawData(
-    PrinterConnectionParams printer,
+    PrinterConnectionParamsDTO printer,
     Uint8List labelCommands,
     int width,
   );
@@ -162,30 +163,22 @@ abstract class POSPrintersApi {
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted
   void printZplHtml(
-    PrinterConnectionParams printer,
+    PrinterConnectionParamsDTO printer,
     String html,
     int width,
-    int height,
   );
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  ZPLStatusResult getZPLPrinterStatus(PrinterConnectionParams printer);
+  ZPLStatusResult getZPLPrinterStatus(PrinterConnectionParamsDTO printer);
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.
 @FlutterApi()
 abstract class PrinterDiscoveryEventsApi {
-  /// Вызывается при обнаружении нового (уникального) принтера.
-  /// `printer` содержит информацию о найденном принтере. Используйте стабильные
-  /// идентификаторы из него (`vendorId`/`productId`/`usbSerialNumber` или `ipAddress`)
-  /// для создания `PrinterConnectionParams` при вызове `connectPrinter`.
-  void onPrinterFound(DiscoveredPrinterDTO printer);
-
-  /// Вызывается по завершении всего процесса поиска.
-  /// `success` = true, если поиск завершился без критических ошибок (даже если ничего не найдено).
-  /// `errorMessage` содержит сообщение об ошибке, если `success` = false.
-  void onDiscoveryComplete(bool success, String? errorMessage);
-  void onPrinterAttached(DiscoveredPrinterDTO printer);
-  void onPrinterDetached(String id);
+  void onPrinterFound(PrinterConnectionParamsDTO printer);
+  void onDiscoveryComplete(bool success);
+  void onDiscoveryError(String errorMessage);
+  void onPrinterAttached(PrinterConnectionParamsDTO printer);
+  void onPrinterDetached(PrinterConnectionParamsDTO printer);
 }

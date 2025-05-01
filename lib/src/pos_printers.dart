@@ -1,15 +1,13 @@
 import 'dart:developer' as developer;
 import 'dart:async';
 import 'package:flutter/services.dart'; // Required for PlatformException
-import 'package:pos_printers/src/pos_printers.pigeon.dart'; // contains PrinterDiscoveryFilter, ZPLStatusResult
+import 'package:pos_printers/pos_printers.dart';
 
-/// Тип события подключения/отключения принтера
 enum PrinterConnectionEventType { attached, detached }
 
-/// Событие подключения/отключения принтера
 class PrinterConnectionEvent {
   final PrinterConnectionEventType type;
-  final DiscoveredPrinterDTO? printer;
+  final PrinterConnectionParamsDTO? printer;
   final String? id;
   final String? message;
   PrinterConnectionEvent({
@@ -20,53 +18,18 @@ class PrinterConnectionEvent {
   });
 }
 
-/// Manages interactions with POS printers (both standard ESC/POS and label printers).
-///
-/// Provides methods for discovering, connecting, disconnecting, printing,
-/// and managing printers. Discovery results are provided via a stream.
 class PosPrintersManager implements PrinterDiscoveryEventsApi {
   static const String _logTag = 'PosPrintersManager';
 
-  // Implement the FlutterApi
-  /// Internal instance of the Pigeon-generated API.
   final POSPrintersApi _api = POSPrintersApi();
-
-  /// Helper method for executing API requests with unified error handling
-  ///
-  /// [apiOperation] - name of the operation for logging
-  /// [apiCall] - function executing the API request
-  /// [defaultErrorResult] - optional default result object to return on error
-  /// If defaultErrorResult is not specified, errors will be thrown as exceptions
-  Future<T> _executeApiCall<T>(
-      String apiOperation, Future<T> Function() apiCall,
-      {T? defaultErrorResult}) async {
-    try {
-      return await apiCall();
-    } on PlatformException catch (e) {
-      developer.log(
-          "PlatformException in operation '$apiOperation': ${e.message}",
-          name: _logTag);
-      if (defaultErrorResult != null) {
-        return defaultErrorResult;
-      }
-      throw Exception('$apiOperation failed: ${e.message}');
-    } catch (e) {
-      developer.log("Unexpected error in operation '$apiOperation': $e",
-          name: _logTag);
-      if (defaultErrorResult != null) {
-        return defaultErrorResult;
-      }
-      throw Exception('Unexpected error during $apiOperation: $e');
-    }
-  }
 
   /// Stream controller for emitting discovered printers during a scan.
   /// Use broadcast to allow multiple listeners if needed, though typically one is enough.
-  StreamController<DiscoveredPrinterDTO>? _printerDiscoveryController;
+  StreamController<PrinterConnectionParamsDTO>? _printerDiscoveryController;
 
   /// Stream providing discovered printers. Listen to this after calling [findPrinters].
   /// The stream closes when discovery is complete or an error occurs.
-  Stream<DiscoveredPrinterDTO> get discoveryStream =>
+  Stream<PrinterConnectionParamsDTO> get discoveryStream =>
       _printerDiscoveryController?.stream ?? const Stream.empty();
 
   /// Completer to signal the end of the discovery process (success or failure).
@@ -93,28 +56,18 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   }
 
   @override
-  void onPrinterFound(DiscoveredPrinterDTO printer) {
+  void onPrinterFound(PrinterConnectionParamsDTO printer) {
     _printerDiscoveryController?.add(printer);
   }
 
   @override
-  void onDiscoveryComplete(bool success, String? errorMessage) {
+  void onDiscoveryComplete(bool success) {
     if (!(_printerDiscoveryController?.isClosed ?? true)) {
-      if (!success && errorMessage != null) {
-        _printerDiscoveryController!
-            .addError(Exception('Discovery failed: $errorMessage'));
-      }
-      // Close the stream when discovery is complete
       _printerDiscoveryController!.close();
     }
     // Complete the future associated with the findPrinters call
     if (!(_discoveryCompleter?.isCompleted ?? true)) {
-      if (!success && errorMessage != null) {
-        _discoveryCompleter!
-            .completeError(Exception('Discovery failed: $errorMessage'));
-      } else {
-        _discoveryCompleter!.complete();
-      }
+      _discoveryCompleter!.complete();
     }
     // Reset for next scan
     _printerDiscoveryController = null;
@@ -122,7 +75,7 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   }
 
   @override
-  void onPrinterAttached(DiscoveredPrinterDTO printer) {
+  void onPrinterAttached(PrinterConnectionParamsDTO printer) {
     developer.log('USB printer attached: ${printer.id}', name: _logTag);
     _connectionEventsController.add(PrinterConnectionEvent(
       type: PrinterConnectionEventType.attached,
@@ -133,16 +86,16 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   }
 
   @override
-  void onPrinterDetached(String id) {
-    developer.log('USB printer detached: $id', name: _logTag);
+  void onPrinterDetached(PrinterConnectionParamsDTO printer) {
     _connectionEventsController.add(PrinterConnectionEvent(
       type: PrinterConnectionEventType.detached,
-      id: id,
-      message: 'USB detached: $id',
+      printer: printer,
+      id: printer.id,
+      message: 'USB detached:  ${printer.id}',
     ));
   }
 
-  Stream<DiscoveredPrinterDTO> findPrinters({
+  Stream<PrinterConnectionParamsDTO> findPrinters({
     required PrinterDiscoveryFilter? filter,
   }) {
     if (_printerDiscoveryController != null &&
@@ -151,19 +104,10 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     }
     _printerDiscoveryController?.close();
     _printerDiscoveryController =
-        StreamController<DiscoveredPrinterDTO>.broadcast();
+        StreamController<PrinterConnectionParamsDTO>.broadcast();
     _discoveryCompleter = Completer<void>();
     try {
-      _executeApiCall(
-        'Printer discovery initiation',
-        () => _api.findPrinters(filter),
-      ).catchError((error) {
-        _printerDiscoveryController?.addError(error);
-        _printerDiscoveryController?.close();
-        _discoveryCompleter?.completeError(error);
-        _printerDiscoveryController = null;
-        _discoveryCompleter = null;
-      });
+      unawaited(_startDiscoverPrinters(filter: filter));
       return _printerDiscoveryController!.stream;
     } catch (e) {
       _printerDiscoveryController?.addError(e);
@@ -173,6 +117,25 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
       _discoveryCompleter = null;
       return Stream.error(Exception('Unexpected error starting discovery: $e'));
     }
+  }
+
+  Future<void> _startDiscoverPrinters({
+    required PrinterDiscoveryFilter? filter,
+  }) async {
+    final types = filter?.connectionTypes;
+    final discoverAll = types == null || types.isEmpty;
+
+    if (discoverAll || types.contains(DiscoveryConnectionType.usb)) {
+      await _api.startDiscoverAllUsbPrinters();
+    }
+    if (discoverAll || types.contains(DiscoveryConnectionType.sdk)) {
+      await _api.startDiscoveryXprinterSDKNetworkPrinters();
+    }
+    if (discoverAll || types.contains(DiscoveryConnectionType.tcp)) {
+      await _api.startDiscoveryTCPNetworkPrinters(9100);
+    }
+
+    await _printerDiscoveryController?.close();
   }
 
   /// Awaits the completion of the current discovery process.
@@ -188,36 +151,22 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   ///
   /// Returns a [StatusResult] containing the success status, error message (if any),
   /// and the status string itself.
-  Future<StatusResult> getPrinterStatus(PrinterConnectionParams printer) async {
-    return _executeApiCall<StatusResult>(
-      'Get printer status',
-      () => _api.getPrinterStatus(printer),
-      defaultErrorResult: StatusResult(
-        success: false,
-        errorMessage: 'Failed to get printer status',
-      ),
-    );
+  Future<StatusResult> getPrinterStatus(
+      PrinterConnectionParamsDTO printer) async {
+    return _api.getPrinterStatus(printer);
   }
 
   /// Gets the serial number (SN) of the connected printer.
   ///
   /// Returns a [StringResult] containing the success status, error message (if any),
   /// and the serial number string.
-  Future<StringResult> getPrinterSN(PrinterConnectionParams printer) async {
-    return _executeApiCall<StringResult>(
-      'Get printer serial number',
-      () => _api.getPrinterSN(printer),
-      defaultErrorResult: StringResult(
-          success: false, errorMessage: 'Failed to get printer serial number'),
-    );
+  Future<StringResult> getPrinterSN(PrinterConnectionParamsDTO printer) async {
+    return _api.getPrinterSN(printer);
   }
 
   /// Opens the cash drawer connected to the printer.
-  Future<void> openCashBox(PrinterConnectionParams printer) async {
-    return _executeApiCall<void>(
-      'Open cash drawer',
-      () => _api.openCashBox(printer),
-    );
+  Future<void> openCashBox(PrinterConnectionParamsDTO printer) async {
+    return _api.openCashBox(printer);
   }
 
   /// Prints HTML content on a standard ESC/POS receipt printer.
@@ -226,20 +175,14 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [html]: The HTML string to print.
   /// [width]: The printing width in dots.
   Future<void> printEscHTML(
-      PrinterConnectionParams printer, String html, int width) async {
-    return _executeApiCall<void>(
-      'Print HTML receipt',
-      () => _api.printHTML(printer, html, width),
-    );
+      PrinterConnectionParamsDTO printer, String html, int width) async {
+    return _api.printHTML(printer, html, width);
   }
 
   /// Sends raw ESC/POS commands к чековому принтеру.
   Future<void> printEscRawData(
-      PrinterConnectionParams printer, Uint8List data, int width) async {
-    return _executeApiCall<void>(
-      'Print receipt data',
-      () => _api.printData(printer, data, width),
-    );
+      PrinterConnectionParamsDTO printer, Uint8List data, int width) async {
+    return _api.printData(printer, data, width);
   }
 
   /// Configures network settings for a printer (usually via USB connection initially).
@@ -247,11 +190,8 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [printer]: Connection parameters of the target printer (often USB).
   /// [netSettings]: The new network settings to apply.
   Future<void> setNetSettings(
-      PrinterConnectionParams printer, NetworkParams netSettings) async {
-    return _executeApiCall<void>(
-      'Configure network settings',
-      () => _api.setNetSettingsToPrinter(printer, netSettings),
-    );
+      PrinterConnectionParamsDTO printer, NetworkParams netSettings) async {
+    return _api.setNetSettingsToPrinter(printer, netSettings);
   }
 
   /// Configures network settings via UDP broadcast.
@@ -260,50 +200,52 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [netSettings]: The network settings to apply.
   Future<void> configureNetViaUDP(
       String macAddress, NetworkParams netSettings) async {
-    return _executeApiCall<void>(
-      'Configure network via UDP',
-      () => _api.configureNetViaUDP(netSettings),
-    );
+    return _api.configureNetViaUDP(netSettings);
   }
 
   // --- Label Printer Specific Methods ---
 
   /// Sends raw commands (CPCL, TSPL, или ZPL) к принтеру.
   Future<void> printZplRawData(
-    PrinterConnectionParams printer,
+    PrinterConnectionParamsDTO printer,
     Uint8List labelCommands,
     int width,
   ) async {
-    return _executeApiCall<void>(
-      'Print label data',
-      () => _api.printZplRawData(printer, labelCommands, width),
-    );
+    return _api.printZplRawData(printer, labelCommands, width);
   }
 
   /// Prints HTML content rendered as a bitmap on a label printer.
   Future<void> printZplHtml(
-    PrinterConnectionParams printer,
+    PrinterConnectionParamsDTO printer,
     String html,
     int width,
-    int height,
   ) async {
-    return _executeApiCall<void>(
-      'Print HTML ZPL',
-      () => _api.printZplHtml(printer, html, width, height),
-    );
+    return _api.printZplHtml(printer, html, width);
   }
 
   /// Получить статус ZPL‑принтера (коды 00–80)
   Future<ZPLStatusResult> getZPLPrinterStatus(
-      PrinterConnectionParams printer) async {
-    return _executeApiCall<ZPLStatusResult>(
-      'Get ZPL printer status',
-      () => _api.getZPLPrinterStatus(printer),
-      defaultErrorResult: ZPLStatusResult(
-        success: false,
-        code: -1,
-        errorMessage: 'Failed to get ZPL status',
-      ),
-    );
+      PrinterConnectionParamsDTO printer) async {
+    return _api.getZPLPrinterStatus(printer);
+  }
+
+  Future<CheckPrinterLanguageResponse> checkPrinterLanguage(
+      PrinterConnectionParamsDTO printer) async {
+    return _api.checkPrinterLanguage(printer);
+  }
+
+  @override
+  void onDiscoveryError(String errorMessage) {
+    if (_printerDiscoveryController != null) {
+      _printerDiscoveryController!.addError(errorMessage);
+      _printerDiscoveryController!.close();
+    }
+    // Complete the future associated with the findPrinters call
+    if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
+      _discoveryCompleter!.completeError(errorMessage);
+    }
+    // Reset for next scan
+    _printerDiscoveryController = null;
+    _discoveryCompleter = null;
   }
 }
