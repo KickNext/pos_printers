@@ -18,15 +18,11 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import net.posprinter.*
 import net.posprinter.model.AlgorithmType
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
-import kotlin.time.Duration.Companion.milliseconds
 
 /** PosPrintersPlugin */
 class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
@@ -259,8 +255,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             val (connection, target) = preparePrinterConnection(printer)
             handlePrinterConnection(printer, connection, target) {
                 try {
-                    connection.setSendCallback({})
-                    connection.isConnect()
                     val zpl = ZPLPrinter(connection)
                     zpl.sendData(labelCommands)
                     callback(Result.success(Unit))
@@ -418,13 +412,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
-
-    private suspend fun readPrinterResponse(connection: IDeviceConnection): ByteArray =
-        suspendCancellableCoroutine { cont ->
-            connection.readData { data ->
-                cont.resume(data ?: ByteArray(0))
-            }
-        }
 
     private fun logHex(prefix: String, data: ByteArray) {
         val hex = data.joinToString(" ") { "%02X".format(it) }
