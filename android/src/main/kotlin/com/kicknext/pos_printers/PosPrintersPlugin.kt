@@ -440,7 +440,14 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                             )
                         )
                     } catch (e: Exception) {
-                        callback(Result.failure(Exception("Check printer language exception: ${e.message}", e)))
+                        callback(
+                            Result.failure(
+                                Exception(
+                                    "Check printer language exception: ${e.message}",
+                                    e
+                                )
+                            )
+                        )
                     } finally {
                         runCatching { connection.close() }
                     }
@@ -484,21 +491,25 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
         // 1) ZPL  ~HI ---------------------------------------------------------
         val zpl = conn.sendAndRead("~HI\r\n".toByteArray(Charsets.US_ASCII), toMs)
-        if (zpl != null) { logHex("⇠ ZPL", zpl); return PrinterLanguage.ZPL }
+        if (zpl != null) {
+            logHex("⇠ ZPL", zpl); return PrinterLanguage.ZPL
+        }
 
         // 2) ESC/POS GS ( I 3 -----------------------------------------------
         val esc = conn.sendAndRead(byteArrayOf(0x1D, 0x49, 0x43, 0x00), toMs)
-        if (esc != null) { logHex("⇠ ESC GS(I)", esc); return PrinterLanguage.ESC }
+        if (esc != null) {
+            logHex("⇠ ESC GS(I)", esc); return PrinterLanguage.ESC
+        }
 
         // 3) Xprinter ESC i 01 ----------------------------------------------
-        val xp  = conn.sendAndRead(byteArrayOf(0x1B, 0x69, 0x01), toMs)
+        val xp = conn.sendAndRead(byteArrayOf(0x1B, 0x69, 0x01), toMs)
         if (xp != null) {
             logHex("⇠ Xprinter", xp)
             val txt = xp.toString(Charsets.US_ASCII)
             return when {
                 txt.contains("ZPL", true) -> PrinterLanguage.ZPL
                 txt.contains("ESC", true) -> PrinterLanguage.ESC
-                else                      -> PrinterLanguage.ESC
+                else -> PrinterLanguage.ESC
             }
         }
 
@@ -520,6 +531,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                         onSuccess()
                     }
 
+                    POSConnect.USB_ATTACHED -> {}
                     else -> {
                         discoveryEventsApi.onPrinterDetached(printer) {}
                     }
@@ -537,17 +549,22 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         try {
             val (connection, target) = preparePrinterConnection(printer)
             handlePrinterConnection(printer, connection, target) {
-//                connection.setSendCallback(
-//                    {
-//                        Log.d("PosPrintersPlugin", "Send callback: $it")
-//                    }
-//                )
                 val pos = POSPrinter(connection)
                 pos.printerStatus { status ->
                     val text = Utils.mapStatusCodeToString(status)
                     callback(Result.success(StatusResult(true, text, text)))
                 }
             }
+        } catch (e: UsbDeviceNotFoundException) {
+            callback(
+                Result.success(
+                    StatusResult(
+                        false,
+                        "USB device not found",
+                        "USB device not found"
+                    )
+                )
+            )
         } catch (e: Throwable) {
             callback(Result.failure(Exception("Get printer status exception: ${e.message}")))
         }
@@ -705,10 +722,21 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         val device = findUsbDevice(
             params.vendorId.toInt(), params.productId.toInt(), params.serialNumber
         )
-            ?: throw Exception("USB device not found (VID=${params.vendorId}, PID=${params.productId})")
+            ?: throw UsbDeviceNotFoundException(
+                params.vendorId,
+                params.productId,
+                params.serialNumber
+            )
         if (!usbManager.hasPermission(device)) {
             throw SecurityException("USB permission denied for device ${device.deviceName}")
         }
         return device
     }
+
+    class UsbDeviceNotFoundException(
+        val vendorId: Long,
+        val productId: Long,
+        val serialNumber: String?
+    ) : Exception("USB device not found (VID=$vendorId, PID=$productId, SERIAL=${serialNumber ?: "null"})")
+
 }
