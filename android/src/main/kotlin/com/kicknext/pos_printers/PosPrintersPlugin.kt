@@ -325,6 +325,16 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     callback(Result.failure(Exception("Get ZPL status exception: ${e.message}")))
                 }
             }
+        } catch (e: UsbDeviceNotFoundException) {
+            callback(
+                Result.success(
+                    ZPLStatusResult(
+                        false,
+                        0,
+                        "USB device not found"
+                    )
+                )
+            )
         } catch (e: Throwable) {
             callback(Result.failure(Exception("Get ZPL printer status exception: ${e.message}")))
         }
