@@ -556,15 +556,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParamsDTO,
         callback: (Result<StatusResult>) -> Unit
     ) {
+
         try {
+            var text = ""
             val (connection, target) = preparePrinterConnection(printer)
             handlePrinterConnection(printer, connection, target) {
                 val pos = POSPrinter(connection)
                 pos.printerStatus { status ->
-                    val text = Utils.mapStatusCodeToString(status)
-                    callback(Result.success(StatusResult(true, text, text)))
+                    text = Utils.mapStatusCodeToString(status)
                 }
             }
+            callback(Result.success(StatusResult(true, text, text)))
         } catch (e: UsbDeviceNotFoundException) {
             callback(
                 Result.success(
