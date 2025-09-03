@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:typed_data';
-import 'package:flutter/material.dart';
 import 'package:pos_printers/pos_printers.dart';
 import '../models/printer_item.dart';
-import '../utils/html_templates.dart';
 
 /// Service for working with printers: search, connect, and operations
 class PrinterService {
