@@ -29,42 +29,65 @@ object Utils {
         }
     }
 
+    /**
+     * Checks if USB device is a printer based on interface class
+     * Interface class 7 = Printer class
+     */
     fun isUsbPrinter(device: UsbDevice): Boolean =
         (0 until device.interfaceCount).any { device.getInterface(it).interfaceClass == 7 }
 
+    /**
+     * Gets USB device serial number with proper permission and version checks
+     */
     fun getUsbSerialNumber(device: UsbDevice, usbManager: UsbManager): String? =
         if (usbManager.hasPermission(device) && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try { device.serialNumber } catch (_: Exception) { null }
+            try { 
+                device.serialNumber?.takeIf { it.isNotBlank() }
+            } catch (_: Exception) { 
+                null 
+            }
         } else null
 
-    // Parses a dotted-decimal IPv4 address string to a ByteArray
+    /**
+     * Parses a dotted-decimal IPv4 address string to a ByteArray
+     * Validates format and range (0-255 for each octet)
+     */
     fun parseData(str: String): ByteArray? {
         val arr = str.split('.')
         if (arr.size != 4) return null
         return try {
-            byteArrayOf(
-                arr[0].toInt().toByte(),
-                arr[1].toInt().toByte(),
-                arr[2].toInt().toByte(),
-                arr[3].toInt().toByte()
-            )
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    // Parses MAC address strings like "00:1A:2B:3C:4D:5E" or "00-1A-2B-3C-4D-5E" to ByteArray
-    fun parseMacAddress(mac: String): ByteArray? {
-        val parts = mac.split(':', '-')
-        if (parts.size != 6) return null
-        return try {
-            parts.map { it.toInt(16).toByte() }.toByteArray()
+            val bytes = arr.map { part ->
+                val num = part.toInt()
+                if (num !in 0..255) return null
+                num.toByte()
+            }
+            bytes.toByteArray()
         } catch (e: NumberFormatException) {
             null
         }
     }
 
-    // Maps POSConst status codes to human-readable strings
+    /**
+     * Parses MAC address strings like "00:1A:2B:3C:4D:5E" or "00-1A-2B-3C-4D-5E" to ByteArray
+     * Supports both colon and hyphen separators
+     */
+    fun parseMacAddress(mac: String): ByteArray? {
+        val cleanMac = mac.replace(":", "").replace("-", "")
+        if (cleanMac.length != 12) return null
+        
+        return try {
+            (0 until cleanMac.length step 2).map { i ->
+                cleanMac.substring(i, i + 2).toInt(16).toByte()
+            }.toByteArray()
+        } catch (e: NumberFormatException) {
+            null
+        }
+    }
+
+    /**
+     * Maps POSConst status codes to human-readable strings
+     * Includes common error codes and timeout scenarios
+     */
     fun mapStatusCodeToString(status: Int): String = when (status) {
         POSConst.STS_NORMAL -> "Normal status"
         POSConst.STS_COVEROPEN -> "Cover open"
@@ -77,13 +100,19 @@ object Utils {
         else -> "Unknown status code: $status"
     }
 
-    // Retrieves all non-loopback IPv4 network interfaces
+    /**
+     * Retrieves all non-loopback IPv4 network interfaces
+     * Filters out virtual and Docker interfaces
+     */
     fun getLocalIpAddresses(): List<NetworkInfo> {
         val networks = mutableListOf<NetworkInfo>()
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()?.toList() ?: emptyList()
             for (intf in interfaces) {
-                if (!intf.isUp || intf.isLoopback || intf.displayName.contains("vir") || intf.displayName.contains("docker")) continue
+                if (!intf.isUp || intf.isLoopback || 
+                    intf.displayName.contains("vir", ignoreCase = true) || 
+                    intf.displayName.contains("docker", ignoreCase = true)) continue
+                    
                 intf.interfaceAddresses.forEach { addr ->
                     val ip = addr.address
                     if (ip is Inet4Address && addr.networkPrefixLength in 1..31) {
@@ -91,22 +120,31 @@ object Utils {
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w("Utils", "Error getting local IP addresses: ${e.message}")
+        }
         return networks.distinct()
     }
 
-    // Generates a sequence of IPv4 addresses for a given CIDR block, excluding network and broadcast
+    /**
+     * Generates a sequence of IPv4 addresses for a given CIDR block
+     * Excludes network and broadcast addresses
+     */
     fun getIpRangeFromCidr(ipAddress: String, prefixLength: Short): Sequence<String>? {
         try {
             val ipBytes = InetAddress.getByName(ipAddress).address
             if (ipBytes.size != 4) return null
+            
             val ipInt = ipBytes.fold(0) { acc, b -> (acc shl 8) or (b.toInt() and 0xFF) }
             val maskInt = (-1 shl (32 - prefixLength))
             val networkInt = ipInt and maskInt
             val broadcastInt = networkInt or maskInt.inv()
+            
             val startIp = networkInt + 1
             val endIp = broadcastInt - 1
+            
             if (startIp > endIp) return emptySequence()
+            
             return sequence {
                 for (i in startIp..endIp) {
                     val bytes = byteArrayOf(
@@ -118,27 +156,80 @@ object Utils {
                     yield(InetAddress.getByAddress(bytes).hostAddress)
                 }
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("Utils", "Error generating IP range: ${e.message}")
             return null
         }
     }
 
-    // Checks if a TCP port is open on a remote host within a timeout
+    /**
+     * Checks if a TCP port is open on a remote host within a timeout
+     * Uses socket connection attempt
+     */
     suspend fun isPortOpen(ip: String, port: Int, timeoutMs: Int): Boolean {
         var socket: Socket? = null
         return try {
             socket = Socket()
             socket.connect(InetSocketAddress(ip, port), timeoutMs)
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             false
         } finally {
-            try { socket?.close() } catch (_: Exception) {}
+            try { 
+                socket?.close() 
+            } catch (e: Exception) {
+                android.util.Log.w("Utils", "Error closing socket: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Validates IP address format
+     */
+    fun isValidIpAddress(ip: String): Boolean {
+        val parts = ip.split('.')
+        if (parts.size != 4) return false
+        
+        return parts.all { part ->
+            try {
+                val num = part.toInt()
+                num in 0..255
+            } catch (e: NumberFormatException) {
+                false
+            }
+        }
+    }
+    
+    /**
+     * Validates MAC address format (supports colon and hyphen separators)
+     */
+    fun isValidMacAddress(mac: String): Boolean {
+        val macPattern = Regex("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
+        return macPattern.matches(mac)
+    }
+    
+    /**
+     * Converts byte array to hex string for debugging
+     */
+    fun bytesToHex(bytes: ByteArray): String {
+        return bytes.joinToString(" ") { "%02X".format(it) }
+    }
+    
+    /**
+     * Safely gets device name for USB device
+     */
+    fun getUsbDeviceName(device: UsbDevice): String {
+        return try {
+            device.deviceName ?: "Unknown USB Device"
+        } catch (e: Exception) {
+            "USB Device (${device.vendorId}:${device.productId})"
         }
     }
 }
 
-// Await extension for CompletableFuture
+/**
+ * Await extension for CompletableFuture
+ */
 suspend fun <T> CompletableFuture<T>.await(): T = suspendCoroutine { cont ->
     this.whenComplete { result, ex ->
         if (ex == null) cont.resume(result)

@@ -6,7 +6,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import android.os.Build
 import android.util.Log
 import com.izettle.html2bitmap.Html2Bitmap
 import com.izettle.html2bitmap.content.WebViewContent
@@ -14,33 +13,45 @@ import com.kicknext.pos_printers.gen.*
 import com.kicknext.pos_printers.discovery.UsbPrinterDiscovery
 import com.kicknext.pos_printers.discovery.SdkPrinterDiscovery
 import com.kicknext.pos_printers.discovery.TcpPrinterDiscovery
+import com.kicknext.pos_printers.connection.PrinterConnectionManager
+import com.kicknext.pos_printers.printer.PrinterOperations
+import com.kicknext.pos_printers.network.UdpNetworkManager
+import com.kicknext.pos_printers.validation.ParameterValidator
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
-import net.posprinter.*
-import net.posprinter.model.AlgorithmType
-import kotlin.coroutines.resume
+import net.posprinter.POSConnect
 
-/** PosPrintersPlugin */
+/** 
+ * Refactored PosPrintersPlugin with improved architecture and error handling
+ */
 class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
+    companion object {
+        private const val TAG = "PosPrintersPlugin"
+    }
+
     private lateinit var applicationContext: Context
-    private val posUdpNet = ExtendPosUdpNet()
     private lateinit var usbManager: UsbManager
     private lateinit var discoveryEventsApi: PrinterDiscoveryEventsApi
-    private var connections = mutableMapOf<String, IDeviceConnection?>()
+    
+    // Refactored components
+    private lateinit var connectionManager: PrinterConnectionManager
+    private lateinit var printerOperations: PrinterOperations
+    private lateinit var udpNetworkManager: UdpNetworkManager
+    
+    private val pluginScope = CoroutineScope(Dispatchers.IO)
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action ?: return
             val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE) ?: return
-            val isPrinter = Utils.isUsbPrinter(device)
-            if (!isPrinter) return
+            
+            if (!Utils.isUsbPrinter(device)) return
+            
             val serial = Utils.getUsbSerialNumber(device, usbManager)
-            val baseDto = PrinterConnectionParamsDTO(
+            val printerDto = PrinterConnectionParamsDTO(
                 id = "${device.vendorId}:${device.productId}:${serial ?: "null"}",
                 connectionType = PosPrinterConnectionType.USB,
                 usbParams = UsbParams(
@@ -52,124 +63,70 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 ),
                 networkParams = null
             )
-            when (action) {
-                UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                    try {
-                        discoveryEventsApi.onPrinterAttached(baseDto) {}
-                    } catch (_: Exception) {
+            
+            try {
+                when (action) {
+                    UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                        Log.d(TAG, "USB printer attached: ${device.deviceName}")
+                        discoveryEventsApi.onPrinterAttached(printerDto) {}
+                    }
+                    UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                        Log.d(TAG, "USB printer detached: ${device.deviceName}")
+                        discoveryEventsApi.onPrinterDetached(printerDto) {}
                     }
                 }
-
-                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                    try {
-                        discoveryEventsApi.onPrinterDetached(baseDto) {}
-                    } catch (_: Exception) {
-                    }
-                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error handling USB device event: ${e.message}")
             }
         }
     }
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         applicationContext = flutterPluginBinding.applicationContext
+        usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
+        
+        // Initialize SDK
+        POSConnect.init(applicationContext)
+        
+        // Initialize refactored components
+        connectionManager = PrinterConnectionManager(usbManager)
+        printerOperations = PrinterOperations(applicationContext)
+        udpNetworkManager = UdpNetworkManager()
+        
+        // Set up API interfaces
         POSPrintersApi.setUp(flutterPluginBinding.binaryMessenger, this)
         discoveryEventsApi = PrinterDiscoveryEventsApi(flutterPluginBinding.binaryMessenger)
-        usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
-        POSConnect.init(applicationContext)
+        
+        // Register USB device receiver
         val filter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
         applicationContext.registerReceiver(usbReceiver, filter)
+        
+        Log.d(TAG, "PosPrintersPlugin initialized successfully")
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        POSPrintersApi.setUp(binding.binaryMessenger, null)
-        applicationContext.unregisterReceiver(usbReceiver)
-        connections.forEach { (_, connection) ->
-            connection?.close()
+        try {
+            POSPrintersApi.setUp(binding.binaryMessenger, null)
+            applicationContext.unregisterReceiver(usbReceiver)
+            Log.d(TAG, "PosPrintersPlugin detached successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during plugin detachment: ${e.message}")
         }
     }
 
-//    private fun detectType(connectionParams: PrinterConnectionParams, callback: (PrinterLanguage?) -> Unit) {
-//        val connection: IDeviceConnection
-//        val target: String
-//        try {
-//            when (connectionParams.connectionType) {
-//                PosPrinterConnectionType.USB -> {
-//                    val usbParams = connectionParams.usbParams
-//                        ?: throw IllegalArgumentException("USB params are missing")
-//                    val usbDevice = findUsbDevice(
-//                        usbParams.vendorId.toInt(),
-//                        usbParams.productId.toInt(),
-//                        usbParams.usbSerialNumber
-//                    ) ?: throw Exception("USB device not found")
-//                    connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
-//                    target = usbDevice.deviceName
-//                }
-//                PosPrinterConnectionType.NETWORK -> {
-//                    val networkParams = connectionParams.networkParams
-//                        ?: throw IllegalArgumentException("Network params are missing")
-//                    connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-//                    target = networkParams.ipAddress
-//                }
-//                else -> {
-//                    callback(null)
-//                    return
-//                }
-//            }
-//        } catch (e: Exception) {
-//            callback(null)
-//            return
-//        }
-//        val listener = IConnectListener { code, _, _ ->
-//            if (code != POSConnect.CONNECT_SUCCESS) {
-//                callback(null)
-//                return@IConnectListener
-//            }
-//            try {
-//                val posPrinter = POSPrinter(connection)
-//                posPrinter.printerStatus { escStatus ->
-//                    if (escStatus >= POSConst.STS_NORMAL) {
-//                        callback(PrinterLanguage.ESC)
-//                    } else {
-//                        try {
-//                            val zplPrinter = ZPLPrinter(connection)
-//                            zplPrinter.printerStatus { zplCode ->
-//                                val type = if (zplCode in 0..0x80) PrinterLanguage.ZPL else null
-//                                callback(type)
-//                            }
-//                        } catch (zplEx: Exception) {
-//                            callback(null)
-//                        }
-//                    }
-//                }
-//            } catch (ex: Exception) {
-//                callback(null)
-//            }
-//        }
-//        try {
-//            connection.connect(target, listener)
-//        } catch (e: Exception) {
-//            callback(null)
-//        }
-//    }
-
-
     override fun configureNetViaUDP(netSettings: NetworkParams, callback: (Result<Unit>) -> Unit) {
-        try {
-            val macBytes = Utils.parseMacAddress(netSettings.macAddress!!)
-            val ipBytes = Utils.parseData(netSettings.ipAddress)
-            val maskBytes = Utils.parseData(netSettings.mask!!)
-            val gatewayBytes = Utils.parseData(netSettings.gateway!!)
-            if (ipBytes == null || maskBytes == null || gatewayBytes == null) {
-                return callback(Result.failure(Exception("Invalid IP/Mask/Gateway format")))
+        pluginScope.launch {
+            try {
+                ParameterValidator.validateNetworkSettings(netSettings)
+                udpNetworkManager.configureNetworkViaUdp(netSettings)
+                callback(Result.success(Unit))
+            } catch (e: Exception) {
+                Log.e(TAG, "UDP network configuration failed", e)
+                callback(Result.failure(Exception("Configure net via UDP failed: ${e.message}")))
             }
-            val dhcp = netSettings.dhcp
-            posUdpNet.udpNetConfig(macBytes, ipBytes, maskBytes, gatewayBytes, dhcp!!)
-            callback(Result.success(Unit))
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Configure net via UDP exception: ${e.message}")))
         }
     }
 
@@ -180,19 +137,16 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         callback: (Result<Unit>) -> Unit
     ) {
         try {
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                try {
-                    val curPrinter = POSPrinter(connection)
-                    curPrinter.initializePrinter()
-                    curPrinter.sendData(data)
-                    callback(Result.success(Unit))
-                } catch (e: Throwable) {
-                    callback(Result.failure(e))
-                }
-            }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Print ESC Raw data Exception: ${e.message}")))
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validatePrintData(data, width)
+            
+            connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
+                printerOperations.printRawData(connection, data, width)
+            }, callback)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Print data validation failed", e)
+            callback(Result.failure(Exception("Print data validation failed: ${e.message}")))
         }
     }
 
@@ -203,45 +157,60 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         callback: (Result<Unit>) -> Unit
     ) {
         try {
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validateHtmlContent(html, width)
+            
+            // Simple HTML to Bitmap conversion on main thread - like original
             val content = WebViewContent.html(html)
-            val bitmap =
-                Html2Bitmap.Builder().setBitmapWidth(width.toInt()).setContent(content)
-                    .setTextZoom(100).setContext(applicationContext).build().bitmap
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                try {
-                    val curPrinter = POSPrinter(connection)
-                    curPrinter.initializePrinter()
-                    curPrinter.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
-                    curPrinter.cutHalfAndFeed(1)
-                    callback(Result.success(Unit))
-                } catch (e: Throwable) {
-                    callback(Result.failure(e))
-                }
+            val bitmap = Html2Bitmap.Builder()
+                .setBitmapWidth(width.toInt())
+                .setContent(content)
+                .setTextZoom(100)
+                .setContext(applicationContext)
+                .build()
+                .bitmap
+            
+            if (bitmap == null) {
+                callback(Result.failure(Exception("Failed to generate bitmap from HTML")))
+                return
             }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Print ESC HTML Exception: ${e.message}")))
+            
+            connectionManager.executeWithPrintCompletion(printer, { connection ->
+                val curPrinter = net.posprinter.POSPrinter(connection)
+                curPrinter.initializePrinter()
+                curPrinter.printBitmap(bitmap, net.posprinter.POSConst.ALIGNMENT_LEFT, width.toInt())
+                curPrinter.cutHalfAndFeed(1)
+            }, callback)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Print HTML validation failed", e)
+            callback(Result.failure(Exception("Print HTML validation failed: ${e.message}")))
         }
-
     }
 
     override fun openCashBox(
-        printer: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit
+        printer: PrinterConnectionParamsDTO, 
+        callback: (Result<Unit>) -> Unit
     ) {
-        try {
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                try {
-                    val curPrinter = POSPrinter(connection)
-                    curPrinter.initializePrinter()
-                    curPrinter.openCashBox(POSConst.PIN_TWO)
-                    callback(Result.success(Unit))
-                } catch (e: Throwable) {
-                    callback(Result.failure(e))
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
+                        try {
+                            printerOperations.openCashBox(connection)
+                            callback(Result.success(Unit))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Open cash box failed", e)
+                            callback(Result.failure(Exception("Open cash box failed: ${e.message}")))
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Open cash box validation failed", e)
+                callback(Result.failure(Exception("Open cash box validation failed: ${e.message}")))
             }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Open cashbox Exception: ${e.message}")))
         }
     }
 
@@ -252,20 +221,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         callback: (Result<Unit>) -> Unit
     ) {
         try {
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                try {
-                    val zpl = ZPLPrinter(connection)
-                    zpl.sendData(labelCommands)
-                    callback(Result.success(Unit))
-                } catch (e: Throwable) {
-                    callback(Result.failure(e))
-                }
-            }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Print ZPL Raw data exception: ${e.message}")))
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validatePrintData(labelCommands, width)
+            
+            connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
+                printerOperations.printZplRawData(connection, labelCommands, width)
+            }, callback)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Print ZPL raw data validation failed", e)
+            callback(Result.failure(Exception("Print ZPL raw data validation failed: ${e.message}")))
         }
-
     }
 
     override fun printZplHtml(
@@ -275,266 +241,97 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         callback: (Result<Unit>) -> Unit
     ) {
         try {
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                try {
-                    val content = WebViewContent.html(html)
-                    val bmp =
-                        Html2Bitmap.Builder().setBitmapWidth(width.toInt()).setStrictMode(true)
-                            .setContent(content).setTextZoom(100).setContext(applicationContext)
-                            .build().bitmap
-                    val zpl = ZPLPrinter(connection)
-                    zpl.setPrinterWidth(width.toInt())
-                    zpl.addStart()
-                    zpl.printBmpCompress(0, 0, bmp, width.toInt(), AlgorithmType.Dithering)
-                    zpl.addEnd()
-                    callback(Result.success(Unit))
-                } catch (e: Throwable) {
-                    callback(Result.failure(Exception("Print label HTML exception: ${e.message}")))
-                }
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validateHtmlContent(html, width)
+            
+            // Simple HTML to Bitmap conversion - like original
+            val content = WebViewContent.html(html)
+            val bitmap = Html2Bitmap.Builder()
+                .setBitmapWidth(width.toInt())
+                .setContent(content)
+                .setTextZoom(100)
+                .setStrictMode(true)
+                .setContext(applicationContext)
+                .build()
+                .bitmap
+            
+            if (bitmap == null) {
+                callback(Result.failure(Exception("Failed to generate bitmap from HTML")))
+                return
             }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Print ZPL HTML exception: ${e.message}")))
+            
+            connectionManager.executeWithPrintCompletion(printer, { connection ->
+                val zplPrinter = net.posprinter.ZPLPrinter(connection)
+                zplPrinter.setPrinterWidth(width.toInt())
+                zplPrinter.addStart()
+                zplPrinter.printBmpCompress(0, 0, bitmap, width.toInt(), net.posprinter.model.AlgorithmType.Dithering)
+                zplPrinter.addEnd()
+            }, callback)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Print ZPL HTML validation failed", e)
+            callback(Result.failure(Exception("Print ZPL HTML validation failed: ${e.message}")))
         }
     }
 
     override fun getZPLPrinterStatus(
-        printer: PrinterConnectionParamsDTO, callback: (Result<ZPLStatusResult>) -> Unit
+        printer: PrinterConnectionParamsDTO, 
+        callback: (Result<ZPLStatusResult>) -> Unit
     ) {
-        try {
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                try {
-                    val zpl = ZPLPrinter(connection)
-                    zpl.printerStatus(500) { code ->
-                        val success = code == 0
-                        val resultObj = if (success) {
-                            ZPLStatusResult(true, code.toLong(), null)
-                        } else {
-                            ZPLStatusResult(false, code.toLong(), "ZPL status code $code")
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
+                        try {
+                            val result = printerOperations.getZplPrinterStatus(connection)
+                            callback(Result.success(result))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Get ZPL printer status failed", e)
+                            val errorResult = ZPLStatusResult(
+                                success = false,
+                                code = -1,
+                                errorMessage = "Get ZPL status failed: ${e.message}"
+                            )
+                            callback(Result.success(errorResult))
                         }
-                        callback(Result.success(resultObj))
                     }
-                } catch (e: Throwable) {
-                    callback(Result.failure(Exception("Get ZPL status exception: ${e.message}")))
                 }
-            }
-        } catch (e: UsbDeviceNotFoundException) {
-            callback(
-                Result.success(
-                    ZPLStatusResult(
-                        false,
-                        0,
-                        "USB device not found"
-                    )
+            } catch (e: Exception) {
+                Log.e(TAG, "Get ZPL printer status validation failed", e)
+                val errorResult = ZPLStatusResult(
+                    success = false,
+                    code = -1,
+                    errorMessage = "Validation failed: ${e.message}"
                 )
-            )
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Get ZPL printer status exception: ${e.message}")))
+                callback(Result.success(errorResult))
+            }
         }
     }
 
     override fun getPrinterSN(
-        printer: PrinterConnectionParamsDTO, callback: (Result<StringResult>) -> Unit
+        printer: PrinterConnectionParamsDTO, 
+        callback: (Result<StringResult>) -> Unit
     ) {
-        try {
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                val pos = POSPrinter(connection)
-                pos.initializePrinter()
-                pos.getSerialNumber { sn ->
-                    val snString = try {
-                        String(sn, charset("GBK"))
-                    } catch (e: Exception) {
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
                         try {
-                            String(sn, Charsets.UTF_8)
-                        } catch (e2: Exception) {
-                            "Error decoding SN"
+                            val result = printerOperations.getPrinterSerialNumber(connection)
+                            callback(Result.success(result))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Get printer SN failed", e)
+                            callback(Result.failure(Exception("Get printer SN failed: ${e.message}")))
                         }
                     }
-                    if (snString.isEmpty() || snString == "Error decoding SN") {
-                        callback(Result.failure(Exception("Failed to decode serial number: $snString")))
-                    } else {
-                        callback(Result.success(StringResult(success = true, value = snString)))
-                    }
                 }
-            }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Get printer SN exception: ${e.message}")))
-        }
-    }
-
-    override fun startDiscoverAllUsbPrinters(callback: (Result<Unit>) -> Unit) {
-        val discovery = UsbPrinterDiscovery(usbManager)
-        try {
-            discovery.discover(onPrinterFound = { printer ->
-                Log.d("PosPrintersPlugin", "USB printer found: $printer")
-                discoveryEventsApi.onPrinterFound(printer) {}
-            }, onFinish = {
-                callback(Result.success(Unit))
-            })
-        } catch (e: Exception) {
-            callback(Result.failure(e))
-        } finally {
-            Log.d("PosPrintersPlugin", "endDiscoveryUsbPrinters")
-        }
-    }
-
-    override fun startDiscoveryXprinterSDKNetworkPrinters(callback: (Result<Unit>) -> Unit) {
-        val discovery = SdkPrinterDiscovery()
-        try {
-            discovery.discover(onPrinterFound = { printer ->
-                Log.d("PosPrintersPlugin", "SDK printer found: $printer")
-                discoveryEventsApi.onPrinterFound(printer) {}
-            }, onFinish = {
-                callback(Result.success(Unit))
-            })
-        } catch (e: Exception) {
-            callback(Result.failure(e))
-        } finally {
-            Log.d("PosPrintersPlugin", "endDiscoveryXprinterSDKNetworkPrinters")
-        }
-    }
-
-    override fun startDiscoveryTCPNetworkPrinters(port: Long, callback: (Result<Unit>) -> Unit) {
-        val discovery = TcpPrinterDiscovery()
-        try {
-            discovery.discover(onPrinterFound = { printer ->
-                Log.d("PosPrintersPlugin", "TCP printer found: $printer")
-                discoveryEventsApi.onPrinterFound(printer) {}
-            }, onFinish = {
-                callback(Result.success(Unit))
-            })
-        } catch (e: Exception) {
-            callback(Result.failure(e))
-        } finally {
-            Log.d("PosPrintersPlugin", "endDiscoveryTCPNetworkPrinters")
-        }
-    }
-
-
-    private fun logHex(prefix: String, data: ByteArray) {
-        val hex = data.joinToString(" ") { "%02X".format(it) }
-        Log.d("PosPrintersPlugin", "$prefix: $hex")
-    }
-
-
-    override fun checkPrinterLanguage(
-        printer: PrinterConnectionParamsDTO,
-        callback: (Result<CheckPrinterLanguageResponse>) -> Unit
-    ) {
-        try {
-            val (connection, target) = preparePrinterConnection(printer)
-
-            handlePrinterConnection(printer, connection, target) {   // подключаемся
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val lang = detectPrinterLanguage(connection, 500)
-
-                        callback(
-                            Result.success(
-                                CheckPrinterLanguageResponse(lang, printer)
-                            )
-                        )
-                    } catch (e: Exception) {
-                        callback(
-                            Result.failure(
-                                Exception(
-                                    "Check printer language exception: ${e.message}",
-                                    e
-                                )
-                            )
-                        )
-                    } finally {
-                        runCatching { connection.close() }
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Check printer language exception: ${e.message}", e)))
-        }
-    }
-
-    private suspend fun IDeviceConnection.sendAndRead(
-        cmd: ByteArray,
-        timeoutMs: Long
-    ): ByteArray? = suspendCancellableCoroutine { cont ->
-        // 1. Cтартуем таймер‐«будильник»
-        val timer = CoroutineScope(Dispatchers.IO).launch {
-            delay(timeoutMs)
-            if (cont.isActive) cont.resume(null)         // ⇒ возврат по таймауту
-        }
-
-        // 2. Сначала подписываемся на данные…
-        readData { data ->
-            if (cont.isActive && data != null && data.isNotEmpty()) {
-                timer.cancel()                           // ответ пришёл – тушим таймер
-                cont.resume(data)                        // ⇒ возврат с данными
-            }
-        }
-
-        // 3. …потом шлём команду
-        sendData(cmd)
-
-        // 4. Чистим ресурсы, если корутину отменили извне
-        cont.invokeOnCancellation { timer.cancel() }
-    }
-
-
-    private suspend fun detectPrinterLanguage(
-        conn: IDeviceConnection,
-        toMs: Long
-    ): PrinterLanguage {
-
-        // 1) ZPL  ~HI ---------------------------------------------------------
-        val zpl = conn.sendAndRead("~HI\r\n".toByteArray(Charsets.US_ASCII), toMs)
-        if (zpl != null) {
-            logHex("⇠ ZPL", zpl); return PrinterLanguage.ZPL
-        }
-
-        // 2) ESC/POS GS ( I 3 -----------------------------------------------
-        val esc = conn.sendAndRead(byteArrayOf(0x1D, 0x49, 0x43, 0x00), toMs)
-        if (esc != null) {
-            logHex("⇠ ESC GS(I)", esc); return PrinterLanguage.ESC
-        }
-
-        // 3) Xprinter ESC i 01 ----------------------------------------------
-        val xp = conn.sendAndRead(byteArrayOf(0x1B, 0x69, 0x01), toMs)
-        if (xp != null) {
-            logHex("⇠ Xprinter", xp)
-            val txt = xp.toString(Charsets.US_ASCII)
-            return when {
-                txt.contains("ZPL", true) -> PrinterLanguage.ZPL
-                txt.contains("ESC", true) -> PrinterLanguage.ESC
-                else -> PrinterLanguage.ESC
-            }
-        }
-
-        return PrinterLanguage.ESC
-    }
-
-    private fun handlePrinterConnection(
-        printer: PrinterConnectionParamsDTO,
-        connection: IDeviceConnection,
-        target: String,
-        onSuccess: () -> Unit
-    ) {
-        connection.connect(target) { code, connectionInfo, message ->
-            Log.d("PosPrintersPlugin", "handlePrinterConnection: $code, $connectionInfo, $message")
-            try {
-                when (code) {
-                    POSConnect.CONNECT_SUCCESS -> {
-                        discoveryEventsApi.onPrinterAttached(printer) {}
-                        onSuccess()
-                    }
-
-                    POSConnect.USB_ATTACHED -> {}
-                    else -> {
-                        discoveryEventsApi.onPrinterDetached(printer) {}
-                    }
-                }
-            } catch (e: Throwable) {
-                discoveryEventsApi.onPrinterDetached(printer) {}
+            } catch (e: Exception) {
+                Log.e(TAG, "Get printer SN validation failed", e)
+                callback(Result.failure(Exception("Get printer SN validation failed: ${e.message}")))
             }
         }
     }
@@ -543,29 +340,62 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParamsDTO,
         callback: (Result<StatusResult>) -> Unit
     ) {
-
-        try {
-            var text = ""
-            val (connection, target) = preparePrinterConnection(printer)
-            handlePrinterConnection(printer, connection, target) {
-                val pos = POSPrinter(connection)
-                pos.printerStatus { status ->
-                    text = Utils.mapStatusCodeToString(status)
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
+                        try {
+                            val result = printerOperations.getPrinterStatus(connection)
+                            callback(Result.success(result))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Get printer status failed", e)
+                            val errorResult = StatusResult(
+                                success = false,
+                                status = "Error: ${e.message}",
+                                errorMessage = "Failed to get printer status: ${e.message}"
+                            )
+                            callback(Result.success(errorResult))
+                        }
+                    }
                 }
-            }
-            callback(Result.success(StatusResult(true, text, text)))
-        } catch (e: UsbDeviceNotFoundException) {
-            callback(
-                Result.success(
-                    StatusResult(
-                        false,
-                        "USB device not found",
-                        "USB device not found"
-                    )
+            } catch (e: Exception) {
+                Log.e(TAG, "Get printer status validation failed", e)
+                val errorResult = StatusResult(
+                    success = false,
+                    status = "Validation error",
+                    errorMessage = "Validation failed: ${e.message}"
                 )
-            )
-        } catch (e: Throwable) {
-            callback(Result.failure(Exception("Get printer status exception: ${e.message}")))
+                callback(Result.success(errorResult))
+            }
+        }
+    }
+
+    override fun checkPrinterLanguage(
+        printer: PrinterConnectionParamsDTO,
+        callback: (Result<CheckPrinterLanguageResponse>) -> Unit
+    ) {
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
+                        try {
+                            val language = printerOperations.detectPrinterLanguage(connection)
+                            val response = CheckPrinterLanguageResponse(language, printer)
+                            callback(Result.success(response))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Check printer language failed", e)
+                            callback(Result.failure(Exception("Check printer language failed: ${e.message}")))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Check printer language validation failed", e)
+                callback(Result.failure(Exception("Check printer language validation failed: ${e.message}")))
+            }
         }
     }
 
@@ -574,168 +404,102 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         netSettings: NetworkParams,
         callback: (Result<Unit>) -> Unit
     ) {
-        try {
-            val ip = Utils.parseData(netSettings.ipAddress)
-            val mask = Utils.parseData(netSettings.mask!!)
-            val gateway = Utils.parseData(netSettings.gateway!!)
-            if (ip == null || mask == null || gateway == null) {
-                callback(Result.failure(Exception("Invalid IP/Mask/Gateway format")))
-                return
-            }
-            val dhcp = netSettings.dhcp
-            val newPrinterConnection: IDeviceConnection
-            val connectionTargetInfo: String
-            when (printer.connectionType) {
-                PosPrinterConnectionType.USB -> {
-                    val usbDevice = getValidatedUsbDevice(printer.usbParams!!)
-                    newPrinterConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
-                    connectionTargetInfo = usbDevice.deviceName
-                }
-
-                PosPrinterConnectionType.NETWORK -> {
-                    if (printer.networkParams == null) {
-                        callback(Result.failure(Exception("Missing ipAddress for Network connection.")))
-                        return
-                    }
-                    newPrinterConnection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-                    connectionTargetInfo = printer.networkParams.ipAddress
-                }
-            }
-            var replySubmitted = false
-            val handler = IConnectListener { code, connInfo, msg ->
-                synchronized(this) {
-                    if (replySubmitted) return@synchronized
-                    when (code) {
-                        POSConnect.CONNECT_SUCCESS -> {
-                            try {
-                                val p = POSPrinter(newPrinterConnection)
-                                p.setNetAll(ip, mask, gateway, dhcp!!)
-                                // Ждём 1 секунду перед закрытием соединения и возвратом результата
-                                Thread {
-                                    Thread.sleep(1000)
-                                    if (!replySubmitted) {
-                                        callback(Result.success(Unit))
-                                        replySubmitted = true
-                                    }
-                                    newPrinterConnection.close()
-                                }.start()
-                            } catch (e: Exception) {
-                                if (!replySubmitted) {
-                                    callback(Result.failure(Exception("Error applying net settings: ${e.message}")))
-                                    replySubmitted = true
-                                }
-                                newPrinterConnection.close()
-                            }
-                        }
-
-                        POSConnect.CONNECT_FAIL, POSConnect.CONNECT_INTERRUPT, POSConnect.SEND_FAIL -> {
-                            if (!replySubmitted) {
-                                val errorMsg = when (code) {
-                                    POSConnect.CONNECT_FAIL -> "Connection failed during net settings: $msg"
-                                    POSConnect.CONNECT_INTERRUPT -> "Connection interrupted during net settings: $msg"
-                                    POSConnect.SEND_FAIL -> "Failed to send net settings command: $msg"
-                                    else -> "Unknown connection error ($code) during net settings: $msg"
-                                }
-                                callback(Result.failure(Exception(errorMsg)))
-                                replySubmitted = true
-                            }
-                        }
-
-                        else -> {
-                            if (!replySubmitted) {
-                                callback(Result.failure(Exception("Unknown status ($code) during net settings: $msg")))
-                                replySubmitted = true
-                            }
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                ParameterValidator.validateNetworkSettings(netSettings)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
+                        try {
+                            printerOperations.setNetworkSettings(connection, netSettings)
+                            callback(Result.success(Unit))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Set network settings failed", e)
+                            callback(Result.failure(Exception("Set network settings failed: ${e.message}")))
                         }
                     }
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "Set network settings validation failed", e)
+                callback(Result.failure(Exception("Set network settings validation failed: ${e.message}")))
             }
-            newPrinterConnection.connect(connectionTargetInfo, handler)
-        } catch (platformError: Throwable) {
-            callback(Result.failure(Exception("Set net settings exception: ${platformError.message}")))
         }
     }
 
-    private fun findUsbDevice(vendorId: Int, productId: Int, serialNumber: String?): UsbDevice? {
-        val devices = usbManager.deviceList.values
-        return devices.find { device ->
-            val vidMatch = device.vendorId == vendorId
-            val pidMatch = device.productId == productId
-            val serialMatch = if (serialNumber == null) {
-                true
-            } else {
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    try {
-
-                        if (usbManager.hasPermission(device)) {
-                            device.serialNumber == serialNumber
-                        } else {
-                            false
+    override fun startDiscoverAllUsbPrinters(callback: (Result<Unit>) -> Unit) {
+        pluginScope.launch {
+            try {
+                val discovery = UsbPrinterDiscovery(usbManager)
+                discovery.discover(
+                    onPrinterFound = { printer ->
+                        Log.d(TAG, "USB printer found: ${printer.id}")
+                        try {
+                            discoveryEventsApi.onPrinterFound(printer) {}
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error notifying printer found: ${e.message}")
                         }
-                    } catch (e: SecurityException) {
-                        false
-                    } catch (e: Exception) {
-                        false
+                    },
+                    onFinish = {
+                        Log.d(TAG, "USB printer discovery completed")
+                        callback(Result.success(Unit))
                     }
-                } else {
-                    true
-                }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "USB printer discovery failed", e)
+                callback(Result.failure(Exception("USB printer discovery failed: ${e.message}")))
             }
-            vidMatch && pidMatch && serialMatch
         }
     }
 
-    private fun preparePrinterConnection(printer: PrinterConnectionParamsDTO): Pair<IDeviceConnection, String> {
-        val id: String
-        val device: IDeviceConnection
-        val target: String
-
-        when (printer.connectionType) {
-            PosPrinterConnectionType.USB -> {
-                val usbParams = printer.usbParams!!
-                id =
-                    "usb:${usbParams.vendorId}:${usbParams.productId}:${usbParams.serialNumber ?: "null"}"
-                val usb = getValidatedUsbDevice(usbParams)
-                device = connections.getOrPut(id) {
-                    POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
-                }!!
-                target = usb.deviceName
-            }
-
-            PosPrinterConnectionType.NETWORK -> {
-                val ip = printer.networkParams!!.ipAddress
-                id = "net:$ip"
-                device = connections.getOrPut(id) {
-                    POSConnect.createDevice(POSConnect.DEVICE_TYPE_ETHERNET)
-                }!!
-                target = ip
+    override fun startDiscoveryXprinterSDKNetworkPrinters(callback: (Result<Unit>) -> Unit) {
+        pluginScope.launch {
+            try {
+                val discovery = SdkPrinterDiscovery()
+                discovery.discover(
+                    onPrinterFound = { printer ->
+                        Log.d(TAG, "SDK printer found: ${printer.id}")
+                        try {
+                            discoveryEventsApi.onPrinterFound(printer) {}
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error notifying printer found: ${e.message}")
+                        }
+                    },
+                    onFinish = {
+                        Log.d(TAG, "SDK printer discovery completed")
+                        callback(Result.success(Unit))
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "SDK printer discovery failed", e)
+                callback(Result.failure(Exception("SDK printer discovery failed: ${e.message}")))
             }
         }
-
-        return Pair(device, target)
     }
 
-
-    private fun getValidatedUsbDevice(params: UsbParams): UsbDevice {
-        val device = findUsbDevice(
-            params.vendorId.toInt(), params.productId.toInt(), params.serialNumber
-        )
-            ?: throw UsbDeviceNotFoundException(
-                params.vendorId,
-                params.productId,
-                params.serialNumber
-            )
-        if (!usbManager.hasPermission(device)) {
-            throw SecurityException("USB permission denied for device ${device.deviceName}")
+    override fun startDiscoveryTCPNetworkPrinters(port: Long, callback: (Result<Unit>) -> Unit) {
+        pluginScope.launch {
+            try {
+                ParameterValidator.validateTcpPort(port)
+                val discovery = TcpPrinterDiscovery()
+                discovery.discover(
+                    onPrinterFound = { printer ->
+                        Log.d(TAG, "TCP printer found: ${printer.id}")
+                        try {
+                            discoveryEventsApi.onPrinterFound(printer) {}
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error notifying printer found: ${e.message}")
+                        }
+                    },
+                    onFinish = {
+                        Log.d(TAG, "TCP printer discovery completed")
+                        callback(Result.success(Unit))
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "TCP printer discovery failed", e)
+                callback(Result.failure(Exception("TCP printer discovery failed: ${e.message}")))
+            }
         }
-        return device
     }
-
-    class UsbDeviceNotFoundException(
-        val vendorId: Long,
-        val productId: Long,
-        val serialNumber: String?
-    ) : Exception("USB device not found (VID=$vendorId, PID=$productId, SERIAL=${serialNumber ?: "null"})")
-
 }
