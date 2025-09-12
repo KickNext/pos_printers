@@ -116,12 +116,16 @@ class PrinterOperations(private val context: Context) {
         val printer = POSPrinter(connection)
         printer.initializePrinter()
         // Некоторые модели ящика/принтера не срабатывают с первого импульса.
-        // Отправляем команду открытия 5 раз подряд без пауз для повышения надежности.
-        repeat(5) {
+        // Отправляем команду открытия 5 раз с небольшой задержкой между попытками
+        // (запрошено 100мс, этого достаточно, чтобы «перезарядить» соленоид).
+        repeat(5) { attempt ->
             printer.openCashBox(POSConst.PIN_TWO)
+            if (attempt < 4) {
+                delay(100)
+            }
         }
 
-        Log.d(TAG, "Cash box open command sent 5 times successfully")
+        Log.d(TAG, "Cash box open command sent 5 times with 100ms gaps")
     }
     
     /**

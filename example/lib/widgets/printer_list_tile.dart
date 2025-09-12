@@ -133,7 +133,7 @@ class FoundPrinterTile extends StatelessWidget {
                       if (item.printerLanguage == null)
                         ElevatedButton.icon(
                           onPressed: onCheckLanguage,
-                          label: Text('Check language'),
+                          label: const Text('Check language'),
                           icon: const Icon(Icons.check_circle),
                         ),
                       const SizedBox(width: 8),
