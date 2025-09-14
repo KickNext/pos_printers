@@ -1,7 +1,10 @@
 package com.kicknext.pos_printers.connection
 
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbEndpoint
+import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
+import android.hardware.usb.UsbConstants
 import android.os.Build
 import android.util.Log
 import com.kicknext.pos_printers.gen.*
@@ -220,6 +223,8 @@ class PrinterConnectionManager(private val usbManager: UsbManager) {
                 val usbParams = printer.usbParams 
                     ?: throw IllegalArgumentException("USB params are required for USB connection")
                 val device = findUsbDevice(usbParams)
+                // Дополнительная валидация endpoints до вызова vendor SDK, чтобы не падать с NPE внутри bulkTransfer
+                validateUsbDeviceEndpoints(device)
                 val connection = POSConnect.createDevice(POSConnect.DEVICE_TYPE_USB)
                 Pair(connection, device.deviceName)
             }
@@ -260,6 +265,50 @@ class PrinterConnectionManager(private val usbManager: UsbManager) {
         }
         
         return device
+    }
+
+    /**
+     * Проверяет что у интерфейса(ов) принтера есть нужные bulk endpoints.
+     * Минимум требуется один bulk OUT endpoint (для записи). Bulk IN желателен (для статуса), но его отсутствие не должно приводить к NPE.
+     * Некоторые модели метятся классом 7 (printer), некоторые vendor specific (255). Учитываем оба варианта.
+     */
+    private fun validateUsbDeviceEndpoints(device: UsbDevice) {
+        var bulkOut: UsbEndpoint? = null
+        var bulkIn: UsbEndpoint? = null
+        val interfacesInfo = StringBuilder()
+
+        for (i in 0 until device.interfaceCount) {
+            val intf: UsbInterface = try { device.getInterface(i) } catch (e: Exception) {
+                Log.w(TAG, "Cannot access interface $i: ${e.message}")
+                continue
+            }
+            val cls = intf.interfaceClass
+            // Фильтруем только потенциально релевантные интерфейсы (7 = printer, 255 = vendor)
+            if (cls != 7 && cls != 255) continue
+            interfacesInfo.append("[if=$i cls=$cls epCount=${intf.endpointCount}]")
+            for (eIdx in 0 until intf.endpointCount) {
+                val ep = intf.getEndpoint(eIdx)
+                val type = ep.type
+                val dir = ep.direction
+                interfacesInfo.append(" ep($eIdx:t=$type:d=$dir)")
+                if (type == UsbConstants.USB_ENDPOINT_XFER_BULK) {
+                    if (dir == UsbConstants.USB_DIR_OUT && bulkOut == null) bulkOut = ep
+                    if (dir == UsbConstants.USB_DIR_IN && bulkIn == null) bulkIn = ep
+                }
+            }
+        }
+
+        if (bulkOut == null) {
+            Log.e(TAG, "USB validation failed: no bulk OUT endpoint. Device=${device.deviceName} dump=${interfacesInfo}")
+            throw UsbEndpointNotFoundException(device.vendorId, device.productId, missing = "BULK_OUT", dump = interfacesInfo.toString())
+        }
+
+        if (bulkIn == null) {
+            // Не критично, просто предупреждение – некоторые дешевые принтеры не имеют IN канала
+            Log.w(TAG, "USB device has no bulk IN endpoint (status features may be limited). Device=${device.deviceName} dump=${interfacesInfo}")
+        } else {
+            Log.d(TAG, "USB endpoints OK (IN & OUT present). Device=${device.deviceName}")
+        }
     }
     
     /**
@@ -324,3 +373,10 @@ class UsbDeviceNotFoundException(
 ) : Exception("USB device not found (VID=$vendorId, PID=$productId, SERIAL=${serialNumber ?: "null"})")
 
 class ConnectionException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+class UsbEndpointNotFoundException(
+    val vendorId: Int,
+    val productId: Int,
+    val missing: String,
+    val dump: String
+) : Exception("Required USB endpoint not found: $missing (VID=$vendorId, PID=$productId) $dump")
