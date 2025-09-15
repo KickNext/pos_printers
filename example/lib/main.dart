@@ -364,6 +364,19 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _openCashDrawer,
+                      icon: const Icon(Icons.meeting_room_outlined, size: 18),
+                      label: const Text('Drawer', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.brown.shade400,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 6),
@@ -693,6 +706,21 @@ body { font-family: Arial, sans-serif; font-size: 10px; margin: 5px; width: 200p
       setState(() {
         _statusText = 'Ошибка определения языка: $e';
       });
+    }
+  }
+
+  Future<void> _openCashDrawer() async {
+    if (_selectedPrinter == null) return;
+    setState(() { _statusText = 'Opening cash drawer...'; });
+    try {
+      await _printersManager.openCashBox(_selectedPrinter!);
+      if (mounted) {
+        setState(() { _statusText = 'Cash drawer command sent'; });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _statusText = 'Ошибка открытия ящика: $e'; });
+      }
     }
   }
 }

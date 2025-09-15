@@ -229,6 +229,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Open cash drawer
+  Future<void> _openCashDrawer(PrinterItem item) async {
+    try {
+      await _printerService.openCashDrawer(item);
+      if (mounted) {
+        _snackBarHelper.showSuccessSnackbar('Cash drawer command sent.');
+      }
+    } catch (e) {
+      _snackBarHelper.showErrorSnackbar('Open cash drawer error: $e');
+    }
+  }
+
   /// Set network settings via active connection
   Future<void> _setNetSettingsViaConnection(
       PrinterItem item, NetworkParams settings) async {
@@ -345,30 +357,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: const Icon(Icons.print_outlined),
                 tooltip: 'Print test on all connected',
                 onPressed: () async {
-                  for (final p in _connectedPrinters) {
-                    // if (p.discoveredPrinter.printerLanguage ==
-                    //     PrinterLanguage.zpl) {
-                    //   // ZPL label printer
-                    //   try {
-                    //     await _printerService.printLabelHtml(p);
-                    //     await Future.delayed(const Duration(milliseconds: 500));
-                    //     await _printerService.printZplRawData(p);
-                    //   } catch (e) {
-                    //     _snackBarHelper
-                    //         .showErrorSnackbar('Label print error: $e');
-                    //   }
-                    // } else {
-                    //   // ESC/POS receipt printer
-                    //   try {
-                    //     await _printEscHtml(p);
-                    //     await Future.delayed(const Duration(milliseconds: 500));
-                    //     await _printEscPosData(p);
-                    //   } catch (e) {
-                    //     _snackBarHelper
-                    //         .showErrorSnackbar('ESC/POS print error: $e');
-                    //   }
-                    // }
-                  }
                   if (mounted) {
                     _snackBarHelper.showSuccessSnackbar('Print jobs sent.');
                   }
@@ -433,6 +421,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           onSetNetworkSettings: () =>
                                               _showNetworkSettingsDialog(
                                                   item: item, isUdp: false),
+                                          onOpenCashDrawer: () =>
+                                              _openCashDrawer(item),
                                         );
                                       },
                                     ),
@@ -525,6 +515,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               onSetNetworkSettings: () =>
                                   _showNetworkSettingsDialog(
                                       item: item, isUdp: false),
+                              onOpenCashDrawer: () =>
+                                  _openCashDrawer(item),
                             );
                           },
                         ),

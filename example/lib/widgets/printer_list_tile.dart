@@ -8,6 +8,7 @@ class SavedPrinterTile extends StatelessWidget {
   final VoidCallback? onDisconnect;
   final VoidCallback? onGetStatus;
   final VoidCallback? onSetNetworkSettings;
+  final VoidCallback? onOpenCashDrawer;
 
   const SavedPrinterTile({
     super.key,
@@ -15,6 +16,7 @@ class SavedPrinterTile extends StatelessWidget {
     this.onDisconnect,
     this.onGetStatus,
     this.onSetNetworkSettings,
+    this.onOpenCashDrawer,
   });
 
   @override
@@ -73,6 +75,13 @@ class SavedPrinterTile extends StatelessWidget {
                       title: const Text('Printer Status'),
                       dense: true,
                       onTap: onGetStatus,
+                    ),
+                  if (onOpenCashDrawer != null)
+                    ListTile(
+                      leading: const Icon(Icons.meeting_room_outlined),
+                      title: const Text('Open Cash Drawer'),
+                      dense: true,
+                      onTap: onOpenCashDrawer,
                     ),
                   if (isNetwork && onSetNetworkSettings != null)
                     ListTile(

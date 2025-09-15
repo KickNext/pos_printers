@@ -115,41 +115,22 @@ class PrinterOperations(private val context: Context) {
         
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        // Некоторые модели требуют более длинного или повторного импульса (соленоид не всегда успевает сработать).
-        // Стратегия: несколько попыток с экспоненциальной задержкой + проверка статуса (если есть канал IN) между.
-        val attempts = 4
-        var opened = false
-        var lastError: Exception? = null
-        for (i in 0 until attempts) {
-            val start = System.currentTimeMillis()
+        // Стратегия по требованию: всегда отправляем N (по умолчанию 5) импульсов вне зависимости от статуса.
+        // Цель – повысить шанс срабатывания слабого или «тугого» ящика.
+        val attemptsCount = 5
+        val delaysMs = listOf(100L, 150L, 200L, 250L, 300L) // Можно вынести в конфиг позже
+        for (i in 0 until attemptsCount) {
             try {
                 printer.openCashBox(POSConst.PIN_TWO)
-                Log.d(TAG, "Cash drawer pulse sent (attempt=${i + 1}/$attempts)")
-                // Минимальная пауза чтобы дать реле/соленоиду энергию
-                delay(120 + i * 80L) // 120ms, 200ms, 280ms, 360ms
-                // (Опционально) можно запросить статус принтера, но не все модели возвращают
-                try {
-                    printer.printerStatus { code ->
-                        Log.d(TAG, "Status after attempt ${i + 1}: code=$code")
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Status check skipped: ${e.message}")
-                }
-                // Мы не имеем прямого API узнать открылся ли ящик; считаем что если команда отправлена без ошибки — успех
-                opened = true
-                break
+                Log.d(TAG, "Cash drawer pulse ${i + 1}/$attemptsCount sent (delayNext=${if (i < attemptsCount - 1) delaysMs[i] else 0}ms)")
             } catch (e: Exception) {
-                lastError = e
-                Log.w(TAG, "Cash drawer pulse failed attempt ${i + 1}: ${e.message}")
-                val elapsed = System.currentTimeMillis() - start
-                // Ждём чуть больше перед следующей попыткой
-                if (i < attempts - 1) delay((200 - elapsed).coerceAtLeast(50))
+                Log.w(TAG, "Cash drawer pulse ${i + 1} failed: ${e.message}")
+            }
+            if (i < attemptsCount - 1) {
+                delay(delaysMs.getOrElse(i) { 200L })
             }
         }
-        if (!opened) {
-            throw lastError ?: Exception("Failed to open cash drawer after $attempts attempts")
-        }
-        Log.d(TAG, "Cash drawer command sequence completed (opened=$opened)")
+        Log.d(TAG, "Cash drawer pulses sequence finished (count=$attemptsCount)")
     }
     
     /**

@@ -154,4 +154,9 @@ class PrinterService {
     );
     item.printerLanguage = response.printerLanguage;
   }
+
+  /// Open cash drawer via printer pulse (ESC/POS only, но некоторые прошивки игнорируют)
+  Future<void> openCashDrawer(PrinterItem item) async {
+    await _posPrintersManager.openCashBox(item.connectionParams);
+  }
 }

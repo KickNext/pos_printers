@@ -14,6 +14,7 @@ class ConnectedPrintersSection extends StatelessWidget {
   final Function(PrinterItem) onPrintLabelRaw;
   final Function(PrinterItem) onPrintLabelHtml;
   final Function(PrinterItem) onSetupLabelParams;
+  final Function(PrinterItem) onOpenCashDrawer;
 
   const ConnectedPrintersSection({
     super.key,
@@ -27,6 +28,7 @@ class ConnectedPrintersSection extends StatelessWidget {
     required this.onPrintLabelRaw,
     required this.onPrintLabelHtml,
     required this.onSetupLabelParams,
+    required this.onOpenCashDrawer,
   });
 
   @override
@@ -54,6 +56,7 @@ class ConnectedPrintersSection extends StatelessWidget {
               onDisconnect: () => onDisconnect(item),
               onGetStatus: () => onGetStatus(item),
               onSetNetworkSettings: () => onSetNetworkSettings(item),
+              onOpenCashDrawer: () => onOpenCashDrawer(item),
             );
           },
         ),
