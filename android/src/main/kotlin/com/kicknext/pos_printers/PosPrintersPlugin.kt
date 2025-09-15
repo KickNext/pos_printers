@@ -192,24 +192,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParamsDTO, 
         callback: (Result<Unit>) -> Unit
     ) {
+        // Важно: не запускать отдельную корутину внутри executeWithConnection, иначе соединение закроется раньше.
         pluginScope.launch {
             try {
                 ParameterValidator.validatePrinterConnection(printer)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            printerOperations.openCashBox(connection)
-                            callback(Result.success(Unit))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Open cash box failed", e)
-                            callback(Result.failure(Exception("Open cash box failed: ${e.message}")))
-                        }
-                    }
+                connectionManager.executeWithSuspendConnection(printer) { connection ->
+                    printerOperations.openCashBox(connection)
                 }
+                callback(Result.success(Unit))
             } catch (e: Exception) {
-                Log.e(TAG, "Open cash box validation failed", e)
-                callback(Result.failure(Exception("Open cash box validation failed: ${e.message}")))
+                Log.e(TAG, "Open cash box failed", e)
+                callback(Result.failure(Exception("Open cash box failed: ${e.message}")))
             }
         }
     }

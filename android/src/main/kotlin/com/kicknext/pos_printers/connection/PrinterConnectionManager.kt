@@ -198,6 +198,47 @@ class PrinterConnectionManager(private val usbManager: UsbManager) {
     }
 
     /**
+     * Выполняет suspend-операцию (не печать) с автоматическим управлением подключением.
+     * Используется, например, для открытия денежного ящика, где важно дождаться завершения
+     * отправки команд прежде чем закрыть соединение. Важно НЕ запускать корутину параллельно
+     * (через launch) внутри executeWithConnection, иначе соединение закроется раньше.
+     */
+    fun executeWithSuspendConnection(
+        printer: PrinterConnectionParamsDTO,
+        operation: suspend (IDeviceConnection) -> Unit
+    ) {
+        var lastException: Exception? = null
+
+        repeat(MAX_RETRY_ATTEMPTS) { attempt ->
+            val (connection, target) = createConnection(printer)
+            try {
+                Log.d(TAG, "(suspend) Connection attempt ${attempt + 1}/$MAX_RETRY_ATTEMPTS to $target")
+                connectWithTimeout(connection, target)
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        operation(connection)
+                    }
+                    Log.d(TAG, "(suspend) Operation completed successfully")
+                    return
+                } finally {
+                    try {
+                        connection.close()
+                        Log.d(TAG, "(suspend) Connection closed successfully")
+                    } catch (closeEx: Exception) {
+                        Log.w(TAG, "(suspend) Error closing connection: ${closeEx.message}")
+                    }
+                }
+            } catch (e: Exception) {
+                lastException = e
+                Log.w(TAG, "(suspend) Connection attempt ${attempt + 1} failed: ${e.message}")
+                try { connection.close() } catch (_: Exception) {}
+                if (attempt < MAX_RETRY_ATTEMPTS - 1) Thread.sleep(RETRY_DELAY_MS)
+            }
+        }
+        throw lastException ?: Exception("(suspend) Connection failed after $MAX_RETRY_ATTEMPTS attempts")
+    }
+
+    /**
      * Waits for print completion using simple delay
      */
     private fun waitForPrintCompletion(

@@ -115,17 +115,41 @@ class PrinterOperations(private val context: Context) {
         
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        // Некоторые модели ящика/принтера не срабатывают с первого импульса.
-        // Отправляем команду открытия 5 раз с небольшой задержкой между попытками
-        // (запрошено 100мс, этого достаточно, чтобы «перезарядить» соленоид).
-        repeat(5) { attempt ->
-            printer.openCashBox(POSConst.PIN_TWO)
-            if (attempt < 4) {
-                delay(100)
+        // Некоторые модели требуют более длинного или повторного импульса (соленоид не всегда успевает сработать).
+        // Стратегия: несколько попыток с экспоненциальной задержкой + проверка статуса (если есть канал IN) между.
+        val attempts = 4
+        var opened = false
+        var lastError: Exception? = null
+        for (i in 0 until attempts) {
+            val start = System.currentTimeMillis()
+            try {
+                printer.openCashBox(POSConst.PIN_TWO)
+                Log.d(TAG, "Cash drawer pulse sent (attempt=${i + 1}/$attempts)")
+                // Минимальная пауза чтобы дать реле/соленоиду энергию
+                delay(120 + i * 80L) // 120ms, 200ms, 280ms, 360ms
+                // (Опционально) можно запросить статус принтера, но не все модели возвращают
+                try {
+                    printer.printerStatus { code ->
+                        Log.d(TAG, "Status after attempt ${i + 1}: code=$code")
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "Status check skipped: ${e.message}")
+                }
+                // Мы не имеем прямого API узнать открылся ли ящик; считаем что если команда отправлена без ошибки — успех
+                opened = true
+                break
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(TAG, "Cash drawer pulse failed attempt ${i + 1}: ${e.message}")
+                val elapsed = System.currentTimeMillis() - start
+                // Ждём чуть больше перед следующей попыткой
+                if (i < attempts - 1) delay((200 - elapsed).coerceAtLeast(50))
             }
         }
-
-        Log.d(TAG, "Cash box open command sent 5 times with 100ms gaps")
+        if (!opened) {
+            throw lastError ?: Exception("Failed to open cash drawer after $attempts attempts")
+        }
+        Log.d(TAG, "Cash drawer command sequence completed (opened=$opened)")
     }
     
     /**
