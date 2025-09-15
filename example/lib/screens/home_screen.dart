@@ -515,8 +515,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               onSetNetworkSettings: () =>
                                   _showNetworkSettingsDialog(
                                       item: item, isUdp: false),
-                              onOpenCashDrawer: () =>
-                                  _openCashDrawer(item),
+                              onOpenCashDrawer: () => _openCashDrawer(item),
                             );
                           },
                         ),
