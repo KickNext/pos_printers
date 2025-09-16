@@ -115,22 +115,25 @@ class PrinterOperations(private val context: Context) {
         
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        // Стратегия по требованию: всегда отправляем N (по умолчанию 5) импульсов вне зависимости от статуса.
+        // Стратегия по требованию: всегда отправляем N (по умолчанию 3) импульсов вне зависимости от статуса.
         // Цель – повысить шанс срабатывания слабого или «тугого» ящика.
-        val attemptsCount = 5
-        val delaysMs = listOf(100L, 150L, 200L, 250L, 300L) // Можно вынести в конфиг позже
-        for (i in 0 until attemptsCount) {
+        val attemptsCount = 3
+        val delayBetweenMs = 100L // фиксированная задержка между импульсами
+        repeat(attemptsCount) { i ->
             try {
                 printer.openCashBox(POSConst.PIN_TWO)
-                Log.d(TAG, "Cash drawer pulse ${i + 1}/$attemptsCount sent (delayNext=${if (i < attemptsCount - 1) delaysMs[i] else 0}ms)")
+                Log.d(
+                    TAG,
+                    "Cash drawer pulse ${i + 1}/$attemptsCount sent (nextDelay=${if (i < attemptsCount - 1) delayBetweenMs else 0}ms)"
+                )
             } catch (e: Exception) {
                 Log.w(TAG, "Cash drawer pulse ${i + 1} failed: ${e.message}")
             }
             if (i < attemptsCount - 1) {
-                delay(delaysMs.getOrElse(i) { 200L })
+                delay(delayBetweenMs)
             }
         }
-        Log.d(TAG, "Cash drawer pulses sequence finished (count=$attemptsCount)")
+        Log.d(TAG, "Cash drawer pulses sequence finished (count=$attemptsCount, delayBetween=${delayBetweenMs}ms)")
     }
     
     /**
