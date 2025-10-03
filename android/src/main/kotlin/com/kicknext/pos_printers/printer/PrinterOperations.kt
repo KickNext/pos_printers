@@ -199,6 +199,69 @@ class PrinterOperations(private val context: Context) {
     }
     
     /**
+     * Prints TSPL raw data
+     */
+    suspend fun printTsplRawData(
+        connection: IDeviceConnection,
+        labelCommands: ByteArray,
+        width: Long
+    ) = withContext(Dispatchers.IO) {
+        validateTsplPrinterReady(connection)
+        
+        val tsplPrinter = TSPLPrinter(connection)
+        tsplPrinter.sendData(labelCommands)
+        
+        Log.d(TAG, "TSPL raw data printed successfully, ${labelCommands.size} bytes")
+    }
+    
+    /**
+     * Prints HTML as TSPL label
+     */
+    suspend fun printTsplHtml(
+        connection: IDeviceConnection,
+        html: String,
+        width: Long
+    ) = withContext(Dispatchers.IO) {
+        validateTsplPrinterReady(connection)
+        
+        // Generate bitmap from HTML with proper synchronization
+        val bitmap = suspendCoroutine<Bitmap> { continuation ->
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                try {
+                    val content = WebViewContent.html(html)
+                    val bitmapResult = Html2Bitmap.Builder()
+                        .setBitmapWidth(width.toInt())
+                        .setContent(content)
+                        .setTextZoom(100)
+                        .setStrictMode(true)
+                        .setContext(context)
+                        .build()
+                        .bitmap
+                    
+                    if (bitmapResult != null) {
+                        Log.d(TAG, "TSPL HTML to Bitmap conversion successful, size: ${bitmapResult.width}x${bitmapResult.height}")
+                        continuation.resume(bitmapResult)
+                    } else {
+                        continuation.resumeWith(kotlin.Result.failure(IllegalStateException("Generated bitmap is null")))
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "TSPL HTML to Bitmap conversion failed", e)
+                    continuation.resumeWith(kotlin.Result.failure(e))
+                }
+            }
+        }
+        
+        val tsplPrinter = TSPLPrinter(connection)
+        tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
+        tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
+        tsplPrinter.cls()
+        tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, width.toInt(), bitmap, AlgorithmType.Dithering)
+        tsplPrinter.print(1)
+        
+        Log.d(TAG, "TSPL HTML printed successfully")
+    }
+    
+    /**
      * Gets ESC/POS printer status
      */
     suspend fun getPrinterStatus(connection: IDeviceConnection): StatusResult = withContext(Dispatchers.IO) {
@@ -246,6 +309,33 @@ class PrinterOperations(private val context: Context) {
         val errorMessage = if (isSuccess) null else "ZPL status code $statusCode"
         
         ZPLStatusResult(
+            success = isSuccess,
+            code = statusCode.toLong(),
+            errorMessage = errorMessage
+        )
+    }
+    
+    /**
+     * Gets TSPL printer status
+     */
+    suspend fun getTsplPrinterStatus(connection: IDeviceConnection): TSPLStatusResult = withContext(Dispatchers.IO) {
+        val tsplPrinter = TSPLPrinter(connection)
+        
+        val statusCode = suspendCoroutine<Int> { continuation ->
+            try {
+                tsplPrinter.printerStatus(STATUS_CHECK_TIMEOUT_MS.toInt()) { code ->
+                    continuation.resume(code)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting TSPL printer status", e)
+                continuation.resume(-1) // Error status
+            }
+        }
+        
+        val isSuccess = statusCode == 0x00
+        val errorMessage = if (isSuccess) null else mapTsplStatusCodeToString(statusCode)
+        
+        TSPLStatusResult(
             success = isSuccess,
             code = statusCode.toLong(),
             errorMessage = errorMessage
@@ -308,85 +398,6 @@ class PrinterOperations(private val context: Context) {
         Log.d(TAG, "Network settings applied successfully")
     }
     
-    /**
-     * Detects printer language (ESC/POS or ZPL)
-     */
-    suspend fun detectPrinterLanguage(
-        connection: IDeviceConnection,
-        timeoutMs: Long = DEFAULT_TIMEOUT_MS
-    ): PrinterLanguage = withContext(Dispatchers.IO) {
-        
-        // Try ESC/POS status command first (more reliable)
-        val escResponse = sendCommandWithTimeout(
-            connection,
-            byteArrayOf(0x1D, 0x49, 0x43, 0x00), // GS ( I command for status
-            timeoutMs
-        )
-        
-        if (escResponse != null && escResponse.isNotEmpty()) {
-            Log.d(TAG, "ESC/POS printer detected via status command")
-            return@withContext PrinterLanguage.ESC
-        }
-        
-        // Try ZPL status command
-        val zplResponse = sendCommandWithTimeout(
-            connection,
-            "~HI\r\n".toByteArray(Charsets.US_ASCII), // ZPL host identification
-            timeoutMs
-        )
-        
-        if (zplResponse != null && zplResponse.isNotEmpty()) {
-            Log.d(TAG, "ZPL printer detected via ~HI command")
-            return@withContext PrinterLanguage.ZPL
-        }
-        
-        // Try Xprinter identification command as fallback
-        val xprinterResponse = sendCommandWithTimeout(
-            connection,
-            byteArrayOf(0x1B, 0x69, 0x01), // ESC i command
-            timeoutMs
-        )
-        
-        if (xprinterResponse != null && xprinterResponse.isNotEmpty()) {
-            val responseText = String(xprinterResponse, Charsets.US_ASCII)
-            Log.d(TAG, "Xprinter response: $responseText")
-            return@withContext when {
-                responseText.contains("ZPL", ignoreCase = true) -> PrinterLanguage.ZPL
-                else -> PrinterLanguage.ESC
-            }
-        }
-        
-        // Default to ESC/POS if no response
-        Log.d(TAG, "No response to language detection commands, defaulting to ESC/POS")
-        return@withContext PrinterLanguage.ESC
-    }
-    
-    /**
-     * Sends command and waits for response with timeout
-     */
-    private suspend fun sendCommandWithTimeout(
-        connection: IDeviceConnection,
-        command: ByteArray,
-        timeoutMs: Long
-    ): ByteArray? = withTimeoutOrNull(timeoutMs) {
-        suspendCoroutine<ByteArray?> { continuation ->
-            var responseReceived = false
-            
-            // Set up data listener
-            connection.readData { data ->
-                if (!responseReceived && data != null && data.isNotEmpty()) {
-                    responseReceived = true
-                    continuation.resume(data)
-                }
-            }
-            
-            // Send command
-            connection.sendData(command)
-            
-            // If no response after timeout, the withTimeoutOrNull will handle it
-        }
-    }
-    
     private fun validatePrinterReady(connection: IDeviceConnection) {
         // Add any general printer validation logic here
         // For now, just ensure connection is not null
@@ -396,6 +407,11 @@ class PrinterOperations(private val context: Context) {
     private fun validateZplPrinterReady(connection: IDeviceConnection) {
         validatePrinterReady(connection)
         // Add ZPL-specific validation if needed
+    }
+    
+    private fun validateTsplPrinterReady(connection: IDeviceConnection) {
+        validatePrinterReady(connection)
+        // Add TSPL-specific validation if needed
     }
     
     private fun parseIpAddress(ipString: String): ByteArray {
@@ -426,5 +442,25 @@ class PrinterOperations(private val context: Context) {
         -3 -> "Status check: Connection disconnected"
         -4 -> "Status check: Receiving data timed out"
         else -> "Unknown status code: $status"
+    }
+    
+    private fun mapTsplStatusCodeToString(status: Int): String = when (status) {
+        0x00 -> "Normal"
+        0x01 -> "Head opened"
+        0x02 -> "Paper Jam"
+        0x03 -> "Paper Jam and head opened"
+        0x04 -> "Out of paper"
+        0x05 -> "Out of paper and head opened"
+        0x08 -> "Out of ribbon"
+        0x09 -> "Out of ribbon and head opened"
+        0x0A -> "Out of ribbon and paper jam"
+        0x0B -> "Out of ribbon, paper jam and head opened"
+        0x0C -> "Out of ribbon and out of paper"
+        0x0D -> "Out of ribbon, out of paper and head opened"
+        0x10 -> "Pause"
+        0x20 -> "Printing"
+        0x80 -> "Other error"
+        -1 -> "Receive timeout"
+        else -> "TSPL status code: 0x${status.toString(16).uppercase()}"
     }
 }

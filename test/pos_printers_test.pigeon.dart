@@ -21,19 +21,19 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is PosPrinterConnectionType) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is PrinterLanguage) {
-      buffer.putUint8(130);
-      writeValue(buffer, value.index);
     }    else if (value is PrinterConnectionParamsDTO) {
-      buffer.putUint8(131);
+      buffer.putUint8(130);
       writeValue(buffer, value.encode());
     }    else if (value is UsbParams) {
-      buffer.putUint8(132);
+      buffer.putUint8(131);
       writeValue(buffer, value.encode());
     }    else if (value is NetworkParams) {
-      buffer.putUint8(133);
+      buffer.putUint8(132);
       writeValue(buffer, value.encode());
     }    else if (value is ZPLStatusResult) {
+      buffer.putUint8(133);
+      writeValue(buffer, value.encode());
+    }    else if (value is TSPLStatusResult) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
     }    else if (value is StatusResult) {
@@ -41,9 +41,6 @@ class _PigeonCodec extends StandardMessageCodec {
       writeValue(buffer, value.encode());
     }    else if (value is StringResult) {
       buffer.putUint8(136);
-      writeValue(buffer, value.encode());
-    }    else if (value is CheckPrinterLanguageResponse) {
-      buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -57,22 +54,19 @@ class _PigeonCodec extends StandardMessageCodec {
         final int? value = readValue(buffer) as int?;
         return value == null ? null : PosPrinterConnectionType.values[value];
       case 130: 
-        final int? value = readValue(buffer) as int?;
-        return value == null ? null : PrinterLanguage.values[value];
-      case 131: 
         return PrinterConnectionParamsDTO.decode(readValue(buffer)!);
-      case 132: 
+      case 131: 
         return UsbParams.decode(readValue(buffer)!);
-      case 133: 
+      case 132: 
         return NetworkParams.decode(readValue(buffer)!);
-      case 134: 
+      case 133: 
         return ZPLStatusResult.decode(readValue(buffer)!);
+      case 134: 
+        return TSPLStatusResult.decode(readValue(buffer)!);
       case 135: 
         return StatusResult.decode(readValue(buffer)!);
       case 136: 
         return StringResult.decode(readValue(buffer)!);
-      case 137: 
-        return CheckPrinterLanguageResponse.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }

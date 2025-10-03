@@ -303,6 +303,82 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
+    override fun printTsplRawData(
+        printer: PrinterConnectionParamsDTO,
+        labelCommands: ByteArray,
+        width: Long,
+        callback: (Result<Unit>) -> Unit
+    ) {
+        try {
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validatePrintData(labelCommands, width)
+            
+            connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
+                printerOperations.printTsplRawData(connection, labelCommands, width)
+            }, callback)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Print TSPL raw data validation failed", e)
+            callback(Result.failure(Exception("Print TSPL raw data validation failed: ${e.message}")))
+        }
+    }
+
+    override fun printTsplHtml(
+        printer: PrinterConnectionParamsDTO,
+        html: String,
+        width: Long,
+        callback: (Result<Unit>) -> Unit
+    ) {
+        try {
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validateHtmlContent(html, width)
+            
+            connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
+                printerOperations.printTsplHtml(connection, html, width)
+            }, callback)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Print TSPL HTML validation failed", e)
+            callback(Result.failure(Exception("Print TSPL HTML validation failed: ${e.message}")))
+        }
+    }
+
+    override fun getTSPLPrinterStatus(
+        printer: PrinterConnectionParamsDTO, 
+        callback: (Result<TSPLStatusResult>) -> Unit
+    ) {
+        pluginScope.launch {
+            try {
+                ParameterValidator.validatePrinterConnection(printer)
+                
+                connectionManager.executeWithConnection(printer) { connection ->
+                    pluginScope.launch {
+                        try {
+                            val result = printerOperations.getTsplPrinterStatus(connection)
+                            callback(Result.success(result))
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Get TSPL printer status failed", e)
+                            val errorResult = TSPLStatusResult(
+                                success = false,
+                                code = -1,
+                                errorMessage = "Get TSPL status failed: ${e.message}"
+                            )
+                            callback(Result.success(errorResult))
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Get TSPL printer status validation failed", e)
+                val errorResult = TSPLStatusResult(
+                    success = false,
+                    code = -1,
+                    errorMessage = "Validation failed: ${e.message}"
+                )
+                callback(Result.success(errorResult))
+            }
+        }
+    }
+
     override fun getPrinterSN(
         printer: PrinterConnectionParamsDTO, 
         callback: (Result<StringResult>) -> Unit
@@ -361,33 +437,6 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     errorMessage = "Validation failed: ${e.message}"
                 )
                 callback(Result.success(errorResult))
-            }
-        }
-    }
-
-    override fun checkPrinterLanguage(
-        printer: PrinterConnectionParamsDTO,
-        callback: (Result<CheckPrinterLanguageResponse>) -> Unit
-    ) {
-        pluginScope.launch {
-            try {
-                ParameterValidator.validatePrinterConnection(printer)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            val language = printerOperations.detectPrinterLanguage(connection)
-                            val response = CheckPrinterLanguageResponse(language, printer)
-                            callback(Result.success(response))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Check printer language failed", e)
-                            callback(Result.failure(Exception("Check printer language failed: ${e.message}")))
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Check printer language validation failed", e)
-                callback(Result.failure(Exception("Check printer language validation failed: ${e.message}")))
             }
         }
     }

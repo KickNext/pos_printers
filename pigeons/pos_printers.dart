@@ -16,11 +16,6 @@ enum PosPrinterConnectionType {
   network,
 }
 
-enum PrinterLanguage {
-  esc,
-  zpl;
-}
-
 class PrinterConnectionParamsDTO {
   final String id;
   final PosPrinterConnectionType connectionType;
@@ -77,6 +72,16 @@ class ZPLStatusResult {
       {required this.success, required this.code, this.errorMessage});
 }
 
+/// Результат статуса TSPL‑принтера
+class TSPLStatusResult {
+  final bool success;
+  final int code;
+  final String? errorMessage;
+
+  TSPLStatusResult(
+      {required this.success, required this.code, this.errorMessage});
+}
+
 class StatusResult {
   final bool success;
   final String? errorMessage;
@@ -93,19 +98,8 @@ class StringResult {
   StringResult({required this.success, this.errorMessage, this.value});
 }
 
-class CheckPrinterLanguageResponse {
-  final PrinterLanguage printerLanguage;
-  final PrinterConnectionParamsDTO connectionParams;
-
-  CheckPrinterLanguageResponse({
-    required this.printerLanguage,
-    required this.connectionParams,
-  });
-}
-
 @HostApi()
 abstract class POSPrintersApi {
-
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void startDiscoverAllUsbPrinters();
@@ -117,11 +111,6 @@ abstract class POSPrintersApi {
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void startDiscoveryTCPNetworkPrinters(int port);
-
-  @async
-  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  CheckPrinterLanguageResponse checkPrinterLanguage(
-      PrinterConnectionParamsDTO printer);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
@@ -171,6 +160,26 @@ abstract class POSPrintersApi {
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   ZPLStatusResult getZPLPrinterStatus(PrinterConnectionParamsDTO printer);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void printTsplRawData(
+    PrinterConnectionParamsDTO printer,
+    Uint8List labelCommands,
+    int width,
+  );
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void printTsplHtml(
+    PrinterConnectionParamsDTO printer,
+    String html,
+    int width,
+  );
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  TSPLStatusResult getTSPLPrinterStatus(PrinterConnectionParamsDTO printer);
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.

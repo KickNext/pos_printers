@@ -229,9 +229,28 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     return _api.getZPLPrinterStatus(printer);
   }
 
-  Future<CheckPrinterLanguageResponse> checkPrinterLanguage(
+  /// Отправка сырых TSPL-команд принтеру.
+  Future<void> printTsplRawData(
+    PrinterConnectionParamsDTO printer,
+    Uint8List labelCommands,
+    int width,
+  ) async {
+    return _api.printTsplRawData(printer, labelCommands, width);
+  }
+
+  /// Печать HTML как TSPL-этикетки.
+  Future<void> printTsplHtml(
+    PrinterConnectionParamsDTO printer,
+    String html,
+    int width,
+  ) async {
+    return _api.printTsplHtml(printer, html, width);
+  }
+
+  /// Получить статус TSPL-принтера
+  Future<TSPLStatusResult> getTSPLPrinterStatus(
       PrinterConnectionParamsDTO printer) async {
-    return _api.checkPrinterLanguage(printer);
+    return _api.getTSPLPrinterStatus(printer);
   }
 
   @override

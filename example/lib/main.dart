@@ -381,15 +381,35 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
                 ],
               ),
               const SizedBox(height: 6),
+              // Status button only
+              ElevatedButton.icon(
+                onPressed: _checkPrinterStatus,
+                icon: const Icon(Icons.info, size: 18),
+                label: const Text('Status', style: TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // ZPL Examples (always visible)
+              Text('ZPL Examples:',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
               Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _checkPrinterStatus,
-                      icon: const Icon(Icons.info, size: 18),
-                      label:
-                          const Text('Status', style: TextStyle(fontSize: 12)),
+                      onPressed: _printZplSimpleText,
+                      icon: const Icon(Icons.text_fields, size: 18),
+                      label: const Text('ZPL Text',
+                          style: TextStyle(fontSize: 12)),
                       style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                       ),
                     ),
@@ -397,11 +417,81 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _detectPrinterLanguage,
-                      icon: const Icon(Icons.translate, size: 18),
-                      label: const Text('Language',
+                      onPressed: _printZplBarcode,
+                      icon: const Icon(Icons.qr_code_scanner, size: 18),
+                      label:
+                          const Text('Barcode', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _printZplQRCode,
+                      icon: const Icon(Icons.qr_code_2, size: 18),
+                      label:
+                          const Text('QR Code', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // TSPL Examples (always visible)
+              Text('TSPL Examples:',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _printTsplSimpleText,
+                      icon: const Icon(Icons.text_fields, size: 18),
+                      label: const Text('TSPL Text',
                           style: TextStyle(fontSize: 12)),
                       style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _printTsplBarcode,
+                      icon: const Icon(Icons.qr_code_scanner, size: 18),
+                      label:
+                          const Text('Barcode', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _printTsplQRCode,
+                      icon: const Icon(Icons.qr_code_2, size: 18),
+                      label:
+                          const Text('QR Code', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green.shade600,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                       ),
                     ),
@@ -504,7 +594,6 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
       final stream = _printersManager.findPrinters(
         filter: PrinterDiscoveryFilter(
           connectionTypes: [DiscoveryConnectionType.usb],
-          languages: [],
         ),
       );
 
@@ -542,7 +631,6 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
             DiscoveryConnectionType.sdk,
             DiscoveryConnectionType.tcp,
           ],
-          languages: [],
         ),
       );
 
@@ -688,24 +776,210 @@ body { font-family: Arial, sans-serif; font-size: 10px; margin: 5px; width: 200p
     }
   }
 
-  Future<void> _detectPrinterLanguage() async {
+  // ============ ZPL Print Methods ============
+
+  Future<void> _printZplSimpleText() async {
     if (_selectedPrinter == null) return;
 
     setState(() {
-      _statusText = 'Определение языка принтера...';
+      _statusText = 'Печать ZPL текста...';
     });
 
     try {
-      final response =
-          await _printersManager.checkPrinterLanguage(_selectedPrinter!);
+      const zplCommands = '''
+^XA
+^FO50,50^ADN,36,20^FDHello ZPL!^FS
+^FO50,100^ADN,36,20^FDTest Print^FS
+^XZ
+''';
+
+      await _printersManager.printZplRawData(
+        _selectedPrinter!,
+        Uint8List.fromList(zplCommands.codeUnits),
+        203, // 203 DPI label width
+      );
 
       setState(() {
-        _statusText =
-            'Язык принтера: ${response.printerLanguage.name.toUpperCase()}';
+        _statusText = 'ZPL текст отправлен на печать';
       });
     } catch (e) {
       setState(() {
-        _statusText = 'Ошибка определения языка: $e';
+        _statusText = 'Ошибка печати ZPL: $e';
+      });
+    }
+  }
+
+  Future<void> _printZplBarcode() async {
+    if (_selectedPrinter == null) return;
+
+    setState(() {
+      _statusText = 'Печать ZPL штрих-кода...';
+    });
+
+    try {
+      const zplCommands = '''
+^XA
+^FO50,50^ADN,36,20^FDProduct Label^FS
+^FO50,100^BY2^BCN,100,Y,N,N^FD1234567890^FS
+^FO50,220^ADN,24,12^FDSKU: 1234567890^FS
+^XZ
+''';
+
+      await _printersManager.printZplRawData(
+        _selectedPrinter!,
+        Uint8List.fromList(zplCommands.codeUnits),
+        203, // 203 DPI label width
+      );
+
+      setState(() {
+        _statusText = 'ZPL штрих-код отправлен на печать';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Ошибка печати ZPL штрих-кода: $e';
+      });
+    }
+  }
+
+  Future<void> _printZplQRCode() async {
+    if (_selectedPrinter == null) return;
+
+    setState(() {
+      _statusText = 'Печать ZPL QR-кода...';
+    });
+
+    try {
+      const zplCommands = '''
+^XA
+^FO50,50^ADN,36,20^FDScan QR Code:^FS
+^FO50,100^BQN,2,4^FDQA,https://flutter.dev^FS
+^XZ
+''';
+
+      await _printersManager.printZplRawData(
+        _selectedPrinter!,
+        Uint8List.fromList(zplCommands.codeUnits),
+        203, // 203 DPI label width
+      );
+
+      setState(() {
+        _statusText = 'ZPL QR-код отправлен на печать';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Ошибка печати ZPL QR-кода: $e';
+      });
+    }
+  }
+
+  // ============ TSPL Print Methods ============
+
+  Future<void> _printTsplSimpleText() async {
+    if (_selectedPrinter == null) return;
+
+    setState(() {
+      _statusText = 'Печать TSPL текста...';
+    });
+
+    try {
+      // ВАЖНО: Измерьте реальный размер вашей этикетки!
+      // Типичные размеры: 58x40, 58x60, 60x80, 80x50, 100x100 mm
+      // Неправильный размер вызывает ошибку позиционирования
+      const tsplCommands = '''
+SIZE 58 mm, 60 mm
+GAP 2 mm, 0 mm
+DIRECTION 0
+CLS
+TEXT 50,50,"3",0,1,1,"Hello TSPL!"
+TEXT 50,100,"3",0,1,1,"Test Print"
+TEXT 50,150,"2",0,1,1,"Size: 58x60mm"
+PRINT 1
+''';
+
+      await _printersManager.printTsplRawData(
+        _selectedPrinter!,
+        Uint8List.fromList(tsplCommands.codeUnits),
+        203, // 203 DPI label width
+      );
+
+      setState(() {
+        _statusText = 'TSPL текст отправлен на печать';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Ошибка печати TSPL: $e';
+      });
+    }
+  }
+
+  Future<void> _printTsplBarcode() async {
+    if (_selectedPrinter == null) return;
+
+    setState(() {
+      _statusText = 'Печать TSPL штрих-кода...';
+    });
+
+    try {
+      // Используем размер 58x60mm для этикетки со штрих-кодом
+      const tsplCommands = '''
+SIZE 58 mm, 60 mm
+GAP 2 mm, 0 mm
+DIRECTION 0
+CLS
+TEXT 50,20,"3",0,1,1,"Product Label"
+BARCODE 50,60,"128",80,1,0,2,2,"1234567890"
+TEXT 50,160,"2",0,1,1,"SKU: 1234567890"
+PRINT 1
+''';
+
+      await _printersManager.printTsplRawData(
+        _selectedPrinter!,
+        Uint8List.fromList(tsplCommands.codeUnits),
+        203, // 203 DPI label width
+      );
+
+      setState(() {
+        _statusText = 'TSPL штрих-код отправлен на печать';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Ошибка печати TSPL штрих-кода: $e';
+      });
+    }
+  }
+
+  Future<void> _printTsplQRCode() async {
+    if (_selectedPrinter == null) return;
+
+    setState(() {
+      _statusText = 'Печать TSPL QR-кода...';
+    });
+
+    try {
+      // Используем размер 58x60mm для этикетки с QR-кодом
+      const tsplCommands = '''
+SIZE 58 mm, 60 mm
+GAP 2 mm, 0 mm
+DIRECTION 0
+CLS
+TEXT 50,20,"3",0,1,1,"Scan QR Code"
+QRCODE 100,60,H,4,A,0,"https://flutter.dev"
+TEXT 50,200,"2",0,1,1,"flutter.dev"
+PRINT 1
+''';
+
+      await _printersManager.printTsplRawData(
+        _selectedPrinter!,
+        Uint8List.fromList(tsplCommands.codeUnits),
+        203, // 203 DPI label width
+      );
+
+      setState(() {
+        _statusText = 'TSPL QR-код отправлен на печать';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Ошибка печати TSPL QR-кода: $e';
       });
     }
   }

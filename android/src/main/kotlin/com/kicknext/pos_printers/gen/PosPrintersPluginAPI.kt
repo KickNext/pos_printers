@@ -60,17 +60,6 @@ enum class PosPrinterConnectionType(val raw: Int) {
   }
 }
 
-enum class PrinterLanguage(val raw: Int) {
-  ESC(0),
-  ZPL(1);
-
-  companion object {
-    fun ofRaw(raw: Int): PrinterLanguage? {
-      return values().firstOrNull { it.raw == raw }
-    }
-  }
-}
-
 /** Generated class from Pigeon that represents data sent in messages. */
 data class PrinterConnectionParamsDTO (
   val id: String,
@@ -186,6 +175,34 @@ data class ZPLStatusResult (
   }
 }
 
+/**
+ * Результат статуса TSPL‑принтера
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class TSPLStatusResult (
+  val success: Boolean,
+  val code: Long,
+  val errorMessage: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TSPLStatusResult {
+      val success = pigeonVar_list[0] as Boolean
+      val code = pigeonVar_list[1] as Long
+      val errorMessage = pigeonVar_list[2] as String?
+      return TSPLStatusResult(success, code, errorMessage)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      success,
+      code,
+      errorMessage,
+    )
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class StatusResult (
   val success: Boolean,
@@ -233,27 +250,6 @@ data class StringResult (
     )
   }
 }
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class CheckPrinterLanguageResponse (
-  val printerLanguage: PrinterLanguage,
-  val connectionParams: PrinterConnectionParamsDTO
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): CheckPrinterLanguageResponse {
-      val printerLanguage = pigeonVar_list[0] as PrinterLanguage
-      val connectionParams = pigeonVar_list[1] as PrinterConnectionParamsDTO
-      return CheckPrinterLanguageResponse(printerLanguage, connectionParams)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      printerLanguage,
-      connectionParams,
-    )
-  }
-}
 private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -263,28 +259,28 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         }
       }
       130.toByte() -> {
-        return (readValue(buffer) as Long?)?.let {
-          PrinterLanguage.ofRaw(it.toInt())
-        }
-      }
-      131.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           PrinterConnectionParamsDTO.fromList(it)
         }
       }
-      132.toByte() -> {
+      131.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           UsbParams.fromList(it)
         }
       }
-      133.toByte() -> {
+      132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           NetworkParams.fromList(it)
         }
       }
-      134.toByte() -> {
+      133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ZPLStatusResult.fromList(it)
+        }
+      }
+      134.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          TSPLStatusResult.fromList(it)
         }
       }
       135.toByte() -> {
@@ -297,11 +293,6 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
           StringResult.fromList(it)
         }
       }
-      137.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          CheckPrinterLanguageResponse.fromList(it)
-        }
-      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -311,23 +302,23 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         stream.write(129)
         writeValue(stream, value.raw)
       }
-      is PrinterLanguage -> {
-        stream.write(130)
-        writeValue(stream, value.raw)
-      }
       is PrinterConnectionParamsDTO -> {
-        stream.write(131)
+        stream.write(130)
         writeValue(stream, value.toList())
       }
       is UsbParams -> {
-        stream.write(132)
+        stream.write(131)
         writeValue(stream, value.toList())
       }
       is NetworkParams -> {
-        stream.write(133)
+        stream.write(132)
         writeValue(stream, value.toList())
       }
       is ZPLStatusResult -> {
+        stream.write(133)
+        writeValue(stream, value.toList())
+      }
+      is TSPLStatusResult -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
@@ -337,10 +328,6 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
       }
       is StringResult -> {
         stream.write(136)
-        writeValue(stream, value.toList())
-      }
-      is CheckPrinterLanguageResponse -> {
-        stream.write(137)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -354,7 +341,6 @@ interface POSPrintersApi {
   fun startDiscoverAllUsbPrinters(callback: (Result<Unit>) -> Unit)
   fun startDiscoveryXprinterSDKNetworkPrinters(callback: (Result<Unit>) -> Unit)
   fun startDiscoveryTCPNetworkPrinters(port: Long, callback: (Result<Unit>) -> Unit)
-  fun checkPrinterLanguage(printer: PrinterConnectionParamsDTO, callback: (Result<CheckPrinterLanguageResponse>) -> Unit)
   fun getPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<StatusResult>) -> Unit)
   fun getPrinterSN(printer: PrinterConnectionParamsDTO, callback: (Result<StringResult>) -> Unit)
   fun openCashBox(printer: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
@@ -365,6 +351,9 @@ interface POSPrintersApi {
   fun printZplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
   fun printZplHtml(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
   fun getZPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<ZPLStatusResult>) -> Unit)
+  fun printTsplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
+  fun printTsplHtml(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
+  fun getTSPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<TSPLStatusResult>) -> Unit)
 
   companion object {
     /** The codec used by POSPrintersApi. */
@@ -424,27 +413,6 @@ interface POSPrintersApi {
                 reply.reply(wrapError(error))
               } else {
                 reply.reply(wrapResult(null))
-              }
-            }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.checkPrinterLanguage$separatedMessageChannelSuffix", codec, taskQueue)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val printerArg = args[0] as PrinterConnectionParamsDTO
-            api.checkPrinterLanguage(printerArg) { result: Result<CheckPrinterLanguageResponse> ->
-              val error = result.exceptionOrNull()
-              if (error != null) {
-                reply.reply(wrapError(error))
-              } else {
-                val data = result.getOrNull()
-                reply.reply(wrapResult(data))
               }
             }
           }
@@ -651,6 +619,71 @@ interface POSPrintersApi {
             val args = message as List<Any?>
             val printerArg = args[0] as PrinterConnectionParamsDTO
             api.getZPLPrinterStatus(printerArg) { result: Result<ZPLStatusResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplRawData$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val labelCommandsArg = args[1] as ByteArray
+            val widthArg = args[2] as Long
+            api.printTsplRawData(printerArg, labelCommandsArg, widthArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplHtml$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val htmlArg = args[1] as String
+            val widthArg = args[2] as Long
+            api.printTsplHtml(printerArg, htmlArg, widthArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.getTSPLPrinterStatus$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            api.getTSPLPrinterStatus(printerArg) { result: Result<TSPLStatusResult> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))

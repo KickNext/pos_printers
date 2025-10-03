@@ -1,12 +1,12 @@
 # POS Printers Plugin
 
-A comprehensive Flutter plugin for POS (Point of Sale) and label printers, supporting both ESC/POS receipt printers and ZPL label printers with USB and network connectivity.
+A comprehensive Flutter plugin for POS (Point of Sale) and label printers, supporting ESC/POS receipt printers, ZPL label printers, and TSPL label printers with USB and network connectivity.
 
 ## Features
 
-- **Multiple Printer Types**: Support for ESC/POS receipt printers and ZPL label printers
+- **Multiple Printer Types**: Support for ESC/POS receipt printers, ZPL label printers, and TSPL label printers
 - **Multiple Connection Types**: USB, network (TCP), and SDK-based discovery
-- **HTML Printing**: Convert HTML to printable bitmaps for both receipt and label printers
+- **HTML Printing**: Convert HTML to printable bitmaps for receipt and label printers
 - **Raw Data Printing**: Send raw ESC/POS, ZPL, CPCL, and TSPL commands
 - **Printer Discovery**: Automatic discovery of USB and network printers
 - **Connection Management**: Robust connection handling with retry logic and proper cleanup
@@ -72,7 +72,9 @@ final manager = PosPrintersManager();
 - `Future<void> printZplHtml(PrinterConnectionParamsDTO printer, String html, int width)`
 - `Future<void> printZplRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width)`
 - `Future<ZPLStatusResult> getZPLPrinterStatus(PrinterConnectionParamsDTO printer)`
-- `Future<CheckPrinterLanguageResponse> checkPrinterLanguage(PrinterConnectionParamsDTO printer)`
+- `Future<void> printTsplHtml(PrinterConnectionParamsDTO printer, String html, int width)`
+- `Future<void> printTsplRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width)`
+- `Future<TSPLStatusResult> getTSPLPrinterStatus(PrinterConnectionParamsDTO printer)`
 - `Future<void> setNetSettings(PrinterConnectionParamsDTO printer, NetworkParams netSettings)`
 - `Future<void> configureNetViaUDP(String macAddress, NetworkParams netSettings)`
 - `void dispose()`
@@ -157,10 +159,9 @@ await manager.awaitDiscoveryComplete();
 #### Filtered Discovery
 
 ```dart
-// Discover only USB ESC/POS printers
+// Discover only USB printers
 final filter = PrinterDiscoveryFilter(
   connectionTypes: [DiscoveryConnectionType.usb],
-  languages: [PrinterLanguage.esc],
 );
 
 final printerStream = manager.findPrinters(filter: filter);
@@ -277,6 +278,47 @@ await manager.printZplRawData(
 );
 ```
 
+**TSPL Commands:**
+
+```dart
+final tsplCommands = '''
+SIZE 60 mm, 40 mm
+GAP 2 mm, 0 mm
+DIRECTION 0
+CLS
+TEXT 50,50,"3",0,1,1,"Hello World"
+PRINT 1
+''';
+
+await manager.printTsplRawData(
+  printer,
+  Uint8List.fromList(utf8.encode(tsplCommands)),
+  PaperSize.mm58.value
+);
+```
+
+**TSPL HTML Printing:**
+
+```dart
+final html = '''
+<html>
+  <head>
+    <style>
+      body { font-family: Arial; padding: 10px; }
+      h1 { font-size: 24px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <h1>Product Label</h1>
+    <p>SKU: 12345</p>
+    <p>Price: $19.99</p>
+  </body>
+</html>
+''';
+
+await manager.printTsplHtml(printer, html, PaperSize.mm58.value);
+```
+
 ### Paper Sizes
 
 Predefined paper sizes with dot widths:
@@ -316,13 +358,6 @@ if (snResult.success) {
 }
 ```
 
-#### Check Printer Language
-
-```dart
-final response = await manager.checkPrinterLanguage(printer);
-print('Language: ${response.printerLanguage}'); // PrinterLanguage.esc or PrinterLanguage.zpl
-```
-
 #### ZPL Printer Status
 
 ```dart
@@ -332,6 +367,23 @@ if (zplStatus.success) {
   // Status codes: 00-80 (see ZPL documentation)
 } else {
   print('Error: ${zplStatus.errorMessage}');
+}
+```
+
+#### TSPL Printer Status
+
+```dart
+final tsplStatus = await manager.getTSPLPrinterStatus(printer);
+if (tsplStatus.success) {
+  print('TSPL Status Code: ${tsplStatus.code}');
+  // Status codes:
+  // 0x00 - Normal
+  // 0x01 - Head opened
+  // 0x04 - Out of paper
+  // 0x08 - Out of ribbon
+  // See TSPL documentation for complete list
+} else {
+  print('Error: ${tsplStatus.errorMessage}');
 }
 ```
 
