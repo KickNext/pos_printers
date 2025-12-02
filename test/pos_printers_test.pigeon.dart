@@ -42,6 +42,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
+    }    else if (value is UsbPermissionResult) {
+      buffer.putUint8(137);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -67,6 +70,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return StatusResult.decode(readValue(buffer)!);
       case 136: 
         return StringResult.decode(readValue(buffer)!);
+      case 137: 
+        return UsbPermissionResult.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }

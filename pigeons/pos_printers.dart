@@ -98,8 +98,38 @@ class StringResult {
   StringResult({required this.success, this.errorMessage, this.value});
 }
 
+/// Результат проверки/запроса USB разрешений.
+/// Android требует явного запроса разрешения на использование USB устройств.
+class UsbPermissionResult {
+  /// Указывает, было ли разрешение получено успешно.
+  final bool granted;
+
+  /// Сообщение об ошибке, если разрешение не было получено.
+  final String? errorMessage;
+
+  /// Информация о устройстве, для которого запрашивалось разрешение.
+  final String? deviceInfo;
+
+  UsbPermissionResult({
+    required this.granted,
+    this.errorMessage,
+    this.deviceInfo,
+  });
+}
+
 @HostApi()
 abstract class POSPrintersApi {
+  /// Запрашивает разрешение на использование USB устройства у пользователя.
+  /// Это необходимо вызывать перед любыми операциями с USB принтером в Android.
+  /// Возвращает [UsbPermissionResult] с информацией о результате запроса.
+  @async
+  UsbPermissionResult requestUsbPermission(UsbParams usbDevice);
+
+  /// Проверяет, есть ли уже разрешение на использование USB устройства.
+  /// Не показывает диалог пользователю, только проверяет текущее состояние.
+  @async
+  UsbPermissionResult hasUsbPermission(UsbParams usbDevice);
+
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void startDiscoverAllUsbPrinters();

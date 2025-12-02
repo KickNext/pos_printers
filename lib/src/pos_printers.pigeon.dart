@@ -274,6 +274,42 @@ class StringResult {
   }
 }
 
+/// Результат проверки/запроса USB разрешений.
+/// Android требует явного запроса разрешения на использование USB устройств.
+class UsbPermissionResult {
+  UsbPermissionResult({
+    required this.granted,
+    this.errorMessage,
+    this.deviceInfo,
+  });
+
+  /// Указывает, было ли разрешение получено успешно.
+  bool granted;
+
+  /// Сообщение об ошибке, если разрешение не было получено.
+  String? errorMessage;
+
+  /// Информация о устройстве, для которого запрашивалось разрешение.
+  String? deviceInfo;
+
+  Object encode() {
+    return <Object?>[
+      granted,
+      errorMessage,
+      deviceInfo,
+    ];
+  }
+
+  static UsbPermissionResult decode(Object result) {
+    result as List<Object?>;
+    return UsbPermissionResult(
+      granted: result[0]! as bool,
+      errorMessage: result[1] as String?,
+      deviceInfo: result[2] as String?,
+    );
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -306,6 +342,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
+    }    else if (value is UsbPermissionResult) {
+      buffer.putUint8(137);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -331,6 +370,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return StatusResult.decode(readValue(buffer)!);
       case 136: 
         return StringResult.decode(readValue(buffer)!);
+      case 137: 
+        return UsbPermissionResult.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -349,6 +390,65 @@ class POSPrintersApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
   final String pigeonVar_messageChannelSuffix;
+
+  /// Запрашивает разрешение на использование USB устройства у пользователя.
+  /// Это необходимо вызывать перед любыми операциями с USB принтером в Android.
+  /// Возвращает [UsbPermissionResult] с информацией о результате запроса.
+  Future<UsbPermissionResult> requestUsbPermission(UsbParams usbDevice) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.requestUsbPermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[usbDevice]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as UsbPermissionResult?)!;
+    }
+  }
+
+  /// Проверяет, есть ли уже разрешение на использование USB устройства.
+  /// Не показывает диалог пользователю, только проверяет текущее состояние.
+  Future<UsbPermissionResult> hasUsbPermission(UsbParams usbDevice) async {
+    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.hasUsbPermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[usbDevice]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as UsbPermissionResult?)!;
+    }
+  }
 
   Future<void> startDiscoverAllUsbPrinters() async {
     final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoverAllUsbPrinters$pigeonVar_messageChannelSuffix';

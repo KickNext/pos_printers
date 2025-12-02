@@ -17,6 +17,7 @@ import com.kicknext.pos_printers.connection.PrinterConnectionManager
 import com.kicknext.pos_printers.printer.PrinterOperations
 import com.kicknext.pos_printers.network.UdpNetworkManager
 import com.kicknext.pos_printers.validation.ParameterValidator
+import com.kicknext.pos_printers.permission.UsbPermissionManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,13 @@ import kotlinx.coroutines.launch
 import net.posprinter.POSConnect
 
 /** 
- * Refactored PosPrintersPlugin with improved architecture and error handling
+ * Refactored PosPrintersPlugin with improved architecture and error handling.
+ * 
+ * Поддерживает:
+ * - USB и сетевые принтеры
+ * - POS, ZPL и TSPL команды
+ * - Управление USB-разрешениями через системный диалог
+ * - Асинхронное обнаружение принтеров
  */
 class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
 
@@ -40,13 +47,21 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     private lateinit var connectionManager: PrinterConnectionManager
     private lateinit var printerOperations: PrinterOperations
     private lateinit var udpNetworkManager: UdpNetworkManager
+    private lateinit var usbPermissionManager: UsbPermissionManager
     
     private val pluginScope = CoroutineScope(Dispatchers.IO)
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action ?: return
-            val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE) ?: return
+            
+            // Используем совместимый способ получения Parcelable для Android 13+
+            val device = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(UsbManager.EXTRA_DEVICE)
+            } ?: return
             
             if (!Utils.isUsbPrinter(device)) return
             
@@ -92,6 +107,10 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         connectionManager = PrinterConnectionManager(usbManager)
         printerOperations = PrinterOperations(applicationContext)
         udpNetworkManager = UdpNetworkManager()
+        usbPermissionManager = UsbPermissionManager(applicationContext, usbManager)
+        
+        // Регистрируем менеджер разрешений для получения ответов от системы
+        usbPermissionManager.register()
         
         // Set up API interfaces
         POSPrintersApi.setUp(flutterPluginBinding.binaryMessenger, this)
@@ -111,9 +130,65 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         try {
             POSPrintersApi.setUp(binding.binaryMessenger, null)
             applicationContext.unregisterReceiver(usbReceiver)
+            usbPermissionManager.unregister()
             Log.d(TAG, "PosPrintersPlugin detached successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error during plugin detachment: ${e.message}")
+        }
+    }
+    
+    // ==================== USB Permission Methods ====================
+    
+    /**
+     * Запрашивает разрешение на использование USB-устройства.
+     * 
+     * В Android для работы с USB необходимо:
+     * 1. Найти устройство в списке подключённых
+     * 2. Запросить разрешение у пользователя через системный диалог
+     * 3. Дождаться ответа пользователя
+     * 4. Только после получения разрешения можно работать с устройством
+     * 
+     * @param usbDevice Параметры USB-устройства (VID, PID, serial)
+     * @param callback Коллбэк с результатом запроса
+     */
+    override fun requestUsbPermission(
+        usbDevice: UsbParams,
+        callback: (Result<UsbPermissionResult>) -> Unit
+    ) {
+        Log.d(TAG, "Requesting USB permission for VID=${usbDevice.vendorId}, PID=${usbDevice.productId}")
+        
+        // Запрос разрешения должен выполняться в главном потоке
+        Utils.runOnMainThread {
+            try {
+                usbPermissionManager.requestPermission(usbDevice) { result ->
+                    Log.d(TAG, "USB permission result: granted=${result.granted}, error=${result.errorMessage}")
+                    callback(Result.success(result))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error requesting USB permission", e)
+                callback(Result.failure(Exception("Failed to request USB permission: ${e.message}")))
+            }
+        }
+    }
+    
+    /**
+     * Проверяет, есть ли уже разрешение на использование USB-устройства.
+     * Не показывает диалог пользователю.
+     * 
+     * @param usbDevice Параметры USB-устройства
+     * @param callback Коллбэк с текущим состоянием разрешения
+     */
+    override fun hasUsbPermission(
+        usbDevice: UsbParams,
+        callback: (Result<UsbPermissionResult>) -> Unit
+    ) {
+        try {
+            val result = usbPermissionManager.hasPermission(usbDevice)
+            Log.d(TAG, "USB permission check: granted=${result.granted}")
+            callback(Result.success(result))
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking USB permission", e)
+            callback(Result.failure(Exception("Failed to check USB permission: ${e.message}")))
         }
     }
 

@@ -297,6 +297,9 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
                       itemBuilder: (context, index) {
                         final printer = _foundPrinters[index];
                         final isSelected = _selectedPrinter?.id == printer.id;
+                        final isUsb = printer.connectionType ==
+                            PosPrinterConnectionType.usb;
+
                         return Card(
                           margin: const EdgeInsets.only(bottom: 4),
                           color: isSelected
@@ -305,10 +308,7 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
                           child: ListTile(
                             dense: true,
                             leading: Icon(
-                              printer.connectionType ==
-                                      PosPrinterConnectionType.usb
-                                  ? Icons.usb
-                                  : Icons.wifi,
+                              isUsb ? Icons.usb : Icons.wifi,
                               size: 20,
                             ),
                             title: Text(
@@ -319,10 +319,22 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
                               _getPrinterSubtitle(printer),
                               style: const TextStyle(fontSize: 12),
                             ),
-                            trailing: isSelected
-                                ? const Icon(Icons.check_circle,
-                                    color: Colors.green, size: 18)
-                                : null,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // USB Permission button (only for USB printers)
+                                if (isUsb)
+                                  IconButton(
+                                    icon: const Icon(Icons.security, size: 18),
+                                    tooltip: 'Request USB Permission',
+                                    onPressed: () =>
+                                        _requestUsbPermission(printer),
+                                  ),
+                                if (isSelected)
+                                  const Icon(Icons.check_circle,
+                                      color: Colors.green, size: 18),
+                              ],
+                            ),
                             onTap: () => _selectPrinter(printer),
                           ),
                         );
@@ -617,6 +629,48 @@ class _PrinterTestScreenState extends State<PrinterTestScreen> {
     }
   }
 
+  /// Запрашивает USB-разрешение для выбранного принтера.
+  ///
+  /// Это обязательный шаг перед работой с USB-принтером в Android.
+  /// Система покажет диалог с запросом разрешения.
+  Future<void> _requestUsbPermission(PrinterConnectionParamsDTO printer) async {
+    if (printer.usbParams == null) {
+      setState(() {
+        _statusText = 'USB params not available';
+      });
+      return;
+    }
+
+    setState(() {
+      _statusText = 'Requesting USB permission...';
+    });
+
+    try {
+      final result =
+          await _printersManager.requestUsbPermission(printer.usbParams!);
+
+      setState(() {
+        if (result.granted) {
+          _statusText =
+              'USB permission granted! Device: ${result.deviceInfo ?? "Unknown"}';
+          // Автоматически выбираем принтер после получения разрешения
+          _selectedPrinter = printer;
+        } else {
+          _statusText =
+              'USB permission denied: ${result.errorMessage ?? "Unknown error"}';
+        }
+      });
+    } on UsbPermissionDeniedException catch (e) {
+      setState(() {
+        _statusText = 'Permission denied: ${e.message}';
+      });
+    } catch (e) {
+      setState(() {
+        _statusText = 'Error requesting permission: $e';
+      });
+    }
+  }
+
   Future<void> _discoverNetworkPrinters() async {
     setState(() {
       _isDiscovering = true;
@@ -699,11 +753,19 @@ td { padding: 2px 0; }
 </html>
       ''';
 
-      await _printersManager.printEscHTML(
-          _selectedPrinter!, testReceiptHtml, 384);
+      // Используем withUsbPermission для автоматического запроса разрешения USB
+      await _printersManager.withUsbPermission(
+        _selectedPrinter!,
+        () => _printersManager.printEscHTML(
+            _selectedPrinter!, testReceiptHtml, 384),
+      );
 
       setState(() {
         _statusText = 'Чек отправлен на печать';
+      });
+    } on UsbPermissionDeniedException catch (e) {
+      setState(() {
+        _statusText = 'USB permission denied: ${e.message}';
       });
     } catch (e) {
       setState(() {

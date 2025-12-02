@@ -250,6 +250,38 @@ data class StringResult (
     )
   }
 }
+
+/**
+ * Результат проверки/запроса USB разрешений.
+ * Android требует явного запроса разрешения на использование USB устройств.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class UsbPermissionResult (
+  /** Указывает, было ли разрешение получено успешно. */
+  val granted: Boolean,
+  /** Сообщение об ошибке, если разрешение не было получено. */
+  val errorMessage: String? = null,
+  /** Информация о устройстве, для которого запрашивалось разрешение. */
+  val deviceInfo: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): UsbPermissionResult {
+      val granted = pigeonVar_list[0] as Boolean
+      val errorMessage = pigeonVar_list[1] as String?
+      val deviceInfo = pigeonVar_list[2] as String?
+      return UsbPermissionResult(granted, errorMessage, deviceInfo)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      granted,
+      errorMessage,
+      deviceInfo,
+    )
+  }
+}
 private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -293,6 +325,11 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
           StringResult.fromList(it)
         }
       }
+      137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          UsbPermissionResult.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -330,6 +367,10 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         stream.write(136)
         writeValue(stream, value.toList())
       }
+      is UsbPermissionResult -> {
+        stream.write(137)
+        writeValue(stream, value.toList())
+      }
       else -> super.writeValue(stream, value)
     }
   }
@@ -338,6 +379,17 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
 
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface POSPrintersApi {
+  /**
+   * Запрашивает разрешение на использование USB устройства у пользователя.
+   * Это необходимо вызывать перед любыми операциями с USB принтером в Android.
+   * Возвращает [UsbPermissionResult] с информацией о результате запроса.
+   */
+  fun requestUsbPermission(usbDevice: UsbParams, callback: (Result<UsbPermissionResult>) -> Unit)
+  /**
+   * Проверяет, есть ли уже разрешение на использование USB устройства.
+   * Не показывает диалог пользователю, только проверяет текущее состояние.
+   */
+  fun hasUsbPermission(usbDevice: UsbParams, callback: (Result<UsbPermissionResult>) -> Unit)
   fun startDiscoverAllUsbPrinters(callback: (Result<Unit>) -> Unit)
   fun startDiscoveryXprinterSDKNetworkPrinters(callback: (Result<Unit>) -> Unit)
   fun startDiscoveryTCPNetworkPrinters(port: Long, callback: (Result<Unit>) -> Unit)
@@ -364,6 +416,46 @@ interface POSPrintersApi {
     @JvmOverloads
     fun setUp(binaryMessenger: BinaryMessenger, api: POSPrintersApi?, messageChannelSuffix: String = "") {
       val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.requestUsbPermission$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val usbDeviceArg = args[0] as UsbParams
+            api.requestUsbPermission(usbDeviceArg) { result: Result<UsbPermissionResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.hasUsbPermission$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val usbDeviceArg = args[0] as UsbParams
+            api.hasUsbPermission(usbDeviceArg) { result: Result<UsbPermissionResult> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
       run {
         val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoverAllUsbPrinters$separatedMessageChannelSuffix", codec, taskQueue)

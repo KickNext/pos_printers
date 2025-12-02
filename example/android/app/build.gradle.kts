@@ -17,7 +17,7 @@ android {
     namespace = "com.kicknext.pos_printers_example"
     compileSdk = flutter.compileSdkVersion
     // Use the highest NDK version required by plugins (backward compatible)
-    ndkVersion = "27.0.12077973"
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

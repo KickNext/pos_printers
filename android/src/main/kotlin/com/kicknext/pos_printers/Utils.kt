@@ -116,7 +116,11 @@ object Utils {
                 intf.interfaceAddresses.forEach { addr ->
                     val ip = addr.address
                     if (ip is Inet4Address && addr.networkPrefixLength in 1..31) {
-                        networks.add(NetworkInfo(ip.hostAddress, addr.networkPrefixLength))
+                        // hostAddress может вернуть null в редких случаях, используем orEmpty()
+                        val hostAddr = ip.hostAddress.orEmpty()
+                        if (hostAddr.isNotEmpty()) {
+                            networks.add(NetworkInfo(hostAddr, addr.networkPrefixLength))
+                        }
                     }
                 }
             }
@@ -153,7 +157,9 @@ object Utils {
                         (i shr 8 and 0xFF).toByte(),
                         (i and 0xFF).toByte()
                     )
-                    yield(InetAddress.getByAddress(bytes).hostAddress)
+                    // hostAddress может вернуть null, безопасно обрабатываем
+                    val addr = InetAddress.getByAddress(bytes).hostAddress
+                    if (addr != null) yield(addr)
                 }
             }
         } catch (e: Exception) {

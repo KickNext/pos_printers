@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/services.dart'; // Required for PlatformException
 import 'package:pos_printers/pos_printers.dart';
 
+/// Типы событий подключения/отключения принтера
 enum PrinterConnectionEventType { attached, detached }
 
+/// Событие подключения или отключения принтера (обычно USB)
 class PrinterConnectionEvent {
   final PrinterConnectionEventType type;
   final PrinterConnectionParamsDTO? printer;
@@ -18,6 +20,52 @@ class PrinterConnectionEvent {
   });
 }
 
+/// Исключение, выбрасываемое при отказе пользователя в USB-разрешении.
+///
+/// Содержит информацию об устройстве и сообщение об ошибке.
+class UsbPermissionDeniedException implements Exception {
+  /// Сообщение об ошибке
+  final String message;
+
+  /// Информация об устройстве (название, производитель)
+  final String? deviceInfo;
+
+  UsbPermissionDeniedException({
+    required this.message,
+    this.deviceInfo,
+  });
+
+  @override
+  String toString() {
+    if (deviceInfo != null) {
+      return 'UsbPermissionDeniedException: $message (Device: $deviceInfo)';
+    }
+    return 'UsbPermissionDeniedException: $message';
+  }
+}
+
+/// Главный класс для управления POS-принтерами.
+///
+/// Предоставляет методы для:
+/// - Обнаружения принтеров (USB, TCP, SDK)
+/// - Печати (ESC/POS, ZPL, TSPL)
+/// - Управления USB-разрешениями
+/// - Настройки сети принтера
+///
+/// Пример использования:
+/// ```dart
+/// final manager = PosPrintersManager();
+///
+/// // Поиск принтеров
+/// await for (final printer in manager.findPrinters(filter: null)) {
+///   print('Найден: ${printer.id}');
+/// }
+///
+/// // Запрос USB-разрешения и печать
+/// await manager.withUsbPermission(printer, () async {
+///   await manager.printEscHTML(printer, '<h1>Test</h1>', 384);
+/// });
+/// ```
 class PosPrintersManager implements PrinterDiscoveryEventsApi {
   static const String _logTag = 'PosPrintersManager';
 
@@ -251,6 +299,103 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   Future<TSPLStatusResult> getTSPLPrinterStatus(
       PrinterConnectionParamsDTO printer) async {
     return _api.getTSPLPrinterStatus(printer);
+  }
+
+  // ==================== USB Permission Methods ====================
+
+  /// Запрашивает разрешение на использование USB-устройства у пользователя.
+  ///
+  /// В Android для работы с USB-устройствами необходимо получить разрешение
+  /// от пользователя. Этот метод показывает системный диалог с запросом.
+  ///
+  /// **ВАЖНО**: Этот метод должен быть вызван перед любыми операциями
+  /// с USB-принтером (печать, получение статуса и т.д.), иначе будет
+  /// ошибка "USB permission denied".
+  ///
+  /// Пример использования:
+  /// ```dart
+  /// final result = await manager.requestUsbPermission(printer.usbParams!);
+  /// if (result.granted) {
+  ///   // Можно работать с принтером
+  ///   await manager.printEscHTML(printer, html, 384);
+  /// } else {
+  ///   print('Пользователь отказал в доступе: ${result.errorMessage}');
+  /// }
+  /// ```
+  ///
+  /// [usbParams] - параметры USB-устройства (vendorId, productId, serialNumber)
+  ///
+  /// Возвращает [UsbPermissionResult] с информацией о результате:
+  /// - [granted] - true если разрешение получено
+  /// - [errorMessage] - сообщение об ошибке (если не получено)
+  /// - [deviceInfo] - информация об устройстве
+  Future<UsbPermissionResult> requestUsbPermission(UsbParams usbParams) async {
+    developer.log(
+        'Requesting USB permission for VID=${usbParams.vendorId}, PID=${usbParams.productId}',
+        name: _logTag);
+    return _api.requestUsbPermission(usbParams);
+  }
+
+  /// Проверяет, есть ли уже разрешение на использование USB-устройства.
+  ///
+  /// Этот метод **не показывает** диалог пользователю, только проверяет
+  /// текущее состояние разрешения.
+  ///
+  /// Полезен для проверки перед операциями, чтобы понять нужно ли
+  /// запрашивать разрешение.
+  ///
+  /// [usbParams] - параметры USB-устройства
+  ///
+  /// Возвращает [UsbPermissionResult] с текущим состоянием разрешения.
+  Future<UsbPermissionResult> hasUsbPermission(UsbParams usbParams) async {
+    return _api.hasUsbPermission(usbParams);
+  }
+
+  /// Удобный метод для работы с USB-принтером с автоматическим запросом разрешения.
+  ///
+  /// Проверяет разрешение, запрашивает его при необходимости, и выполняет
+  /// переданную операцию только при успешном получении разрешения.
+  ///
+  /// [printer] - параметры подключения принтера
+  /// [operation] - операция для выполнения после получения разрешения
+  ///
+  /// Выбрасывает исключение если:
+  /// - Принтер не USB
+  /// - Не удалось получить разрешение
+  Future<T> withUsbPermission<T>(
+    PrinterConnectionParamsDTO printer,
+    Future<T> Function() operation,
+  ) async {
+    // Проверяем что это USB-принтер
+    if (printer.connectionType != PosPrinterConnectionType.usb) {
+      // Для сетевых принтеров разрешение не требуется
+      return operation();
+    }
+
+    final usbParams = printer.usbParams;
+    if (usbParams == null) {
+      throw ArgumentError('USB params are required for USB printer');
+    }
+
+    // Проверяем есть ли уже разрешение
+    final hasPermission = await hasUsbPermission(usbParams);
+    if (hasPermission.granted) {
+      return operation();
+    }
+
+    // Запрашиваем разрешение
+    developer.log('USB permission not granted, requesting...', name: _logTag);
+    final result = await requestUsbPermission(usbParams);
+
+    if (!result.granted) {
+      throw UsbPermissionDeniedException(
+        message: result.errorMessage ?? 'USB permission denied',
+        deviceInfo: result.deviceInfo,
+      );
+    }
+
+    // Выполняем операцию
+    return operation();
   }
 
   @override
