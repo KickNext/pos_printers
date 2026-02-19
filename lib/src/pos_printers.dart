@@ -110,16 +110,7 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
 
   @override
   void onDiscoveryComplete(bool success) {
-    if (!(_printerDiscoveryController?.isClosed ?? true)) {
-      _printerDiscoveryController!.close();
-    }
-    // Complete the future associated with the findPrinters call
-    if (!(_discoveryCompleter?.isCompleted ?? true)) {
-      _discoveryCompleter!.complete();
-    }
-    // Reset for next scan
-    _printerDiscoveryController = null;
-    _discoveryCompleter = null;
+    _finishDiscovery();
   }
 
   @override
@@ -170,20 +161,24 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   Future<void> _startDiscoverPrinters({
     required PrinterDiscoveryFilter? filter,
   }) async {
-    final types = filter?.connectionTypes;
-    final discoverAll = types == null || types.isEmpty;
+    try {
+      final types = filter?.connectionTypes;
+      final discoverAll = types == null || types.isEmpty;
 
-    if (discoverAll || types.contains(DiscoveryConnectionType.usb)) {
-      await _api.startDiscoverAllUsbPrinters();
-    }
-    if (discoverAll || types.contains(DiscoveryConnectionType.sdk)) {
-      await _api.startDiscoveryXprinterSDKNetworkPrinters();
-    }
-    if (discoverAll || types.contains(DiscoveryConnectionType.tcp)) {
-      await _api.startDiscoveryTCPNetworkPrinters(9100);
-    }
+      if (discoverAll || types.contains(DiscoveryConnectionType.usb)) {
+        await _api.startDiscoverAllUsbPrinters();
+      }
+      if (discoverAll || types.contains(DiscoveryConnectionType.sdk)) {
+        await _api.startDiscoveryXprinterSDKNetworkPrinters();
+      }
+      if (discoverAll || types.contains(DiscoveryConnectionType.tcp)) {
+        await _api.startDiscoveryTCPNetworkPrinters(9100);
+      }
 
-    await _printerDiscoveryController?.close();
+      _finishDiscovery();
+    } catch (error, stackTrace) {
+      _finishDiscovery(error: error, stackTrace: stackTrace);
+    }
   }
 
   /// Awaits the completion of the current discovery process.
@@ -222,15 +217,24 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
   /// [printer]: Connection parameters of the target printer.
   /// [html]: The HTML string to print.
   /// [width]: The printing width in dots.
+  /// [upsideDown]: Печать в перевернутом режиме (180°), если поддерживается SDK.
   Future<void> printEscHTML(
-      PrinterConnectionParamsDTO printer, String html, int width) async {
-    return _api.printHTML(printer, html, width);
+    PrinterConnectionParamsDTO printer,
+    String html,
+    int width, {
+    bool upsideDown = false,
+  }) async {
+    return _api.printHTML(printer, html, width, upsideDown);
   }
 
   /// Sends raw ESC/POS commands к чековому принтеру.
   Future<void> printEscRawData(
-      PrinterConnectionParamsDTO printer, Uint8List data, int width) async {
-    return _api.printData(printer, data, width);
+    PrinterConnectionParamsDTO printer,
+    Uint8List data,
+    int width, {
+    bool upsideDown = false,
+  }) async {
+    return _api.printData(printer, data, width, upsideDown);
   }
 
   /// Configures network settings for a printer (usually via USB connection initially).
@@ -400,15 +404,28 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
 
   @override
   void onDiscoveryError(String errorMessage) {
-    if (_printerDiscoveryController != null) {
-      _printerDiscoveryController!.addError(errorMessage);
-      _printerDiscoveryController!.close();
+    _finishDiscovery(error: errorMessage);
+  }
+
+  void _finishDiscovery({Object? error, StackTrace? stackTrace}) {
+    final controller = _printerDiscoveryController;
+    final completer = _discoveryCompleter;
+
+    if (error != null && controller != null && !controller.isClosed) {
+      controller.addError(error, stackTrace);
     }
-    // Complete the future associated with the findPrinters call
-    if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
-      _discoveryCompleter!.completeError(errorMessage);
+    if (controller != null && !controller.isClosed) {
+      controller.close();
     }
-    // Reset for next scan
+
+    if (completer != null && !completer.isCompleted) {
+      if (error == null) {
+        completer.complete();
+      } else {
+        completer.completeError(error, stackTrace);
+      }
+    }
+
     _printerDiscoveryController = null;
     _discoveryCompleter = null;
   }

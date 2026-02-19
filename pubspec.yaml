@@ -1,6 +1,6 @@
 name: pos_printers
 description: "Flutter plugin for Android POS printers with USB permission management"
-version: 0.6.0+2025120201
+version: 0.7.0+2026022001
 # homepage:
 
 environment:

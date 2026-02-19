@@ -156,11 +156,21 @@ abstract class POSPrintersApi {
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void printHTML(PrinterConnectionParamsDTO printer, String html, int width);
+  void printHTML(
+    PrinterConnectionParamsDTO printer,
+    String html,
+    int width,
+    bool upsideDown,
+  );
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
-  void printData(PrinterConnectionParamsDTO printer, Uint8List data, int width);
+  void printData(
+    PrinterConnectionParamsDTO printer,
+    Uint8List data,
+    int width,
+    bool upsideDown,
+  );
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)

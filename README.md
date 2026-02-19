@@ -44,7 +44,8 @@ printerStream.listen((printer) {
 await manager.printEscHTML(
   printer,
   '<html><body><h1>Receipt</h1><p>Total: $10.50</p></body></html>',
-  PaperSize.mm80.value
+  PaperSize.mm80.value,
+  upsideDown: true,
 );
 ```
 
@@ -67,8 +68,8 @@ final manager = PosPrintersManager();
 - `Future<StatusResult> getPrinterStatus(PrinterConnectionParamsDTO printer)`
 - `Future<StringResult> getPrinterSN(PrinterConnectionParamsDTO printer)`
 - `Future<void> openCashBox(PrinterConnectionParamsDTO printer)`
-- `Future<void> printEscHTML(PrinterConnectionParamsDTO printer, String html, int width)`
-- `Future<void> printEscRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width)`
+- `Future<void> printEscHTML(PrinterConnectionParamsDTO printer, String html, int width, {bool upsideDown = false})`
+- `Future<void> printEscRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width, {bool upsideDown = false})`
 - `Future<void> printZplHtml(PrinterConnectionParamsDTO printer, String html, int width)`
 - `Future<void> printZplRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width)`
 - `Future<ZPLStatusResult> getZPLPrinterStatus(PrinterConnectionParamsDTO printer)`
@@ -214,7 +215,7 @@ final html = '''
 </html>
 ''';
 
-await manager.printEscHTML(printer, html, PaperSize.mm80.value);
+await manager.printEscHTML(printer, html, PaperSize.mm80.value, upsideDown: true);
 ```
 
 **ZPL Label Printers:**
@@ -274,7 +275,7 @@ final zplCommands = '''
 await manager.printZplRawData(
   printer,
   Uint8List.fromList(utf8.encode(zplCommands)),
-  PaperSize.mm80.value
+  PaperSize.mm80.value,
 );
 ```
 
@@ -293,7 +294,7 @@ PRINT 1
 await manager.printTsplRawData(
   printer,
   Uint8List.fromList(utf8.encode(tsplCommands)),
-  PaperSize.mm58.value
+  PaperSize.mm58.value,
 );
 ```
 

@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.util.Log
@@ -209,6 +211,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParamsDTO,
         data: ByteArray,
         width: Long,
+        upsideDown: Boolean,
         callback: (Result<Unit>) -> Unit
     ) {
         try {
@@ -216,7 +219,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validatePrintData(data, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printRawData(connection, data, width)
+                printerOperations.printRawData(connection, data, width, upsideDown)
             }, callback)
             
         } catch (e: Exception) {
@@ -229,13 +232,15 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         printer: PrinterConnectionParamsDTO,
         html: String,
         width: Long,
+        upsideDown: Boolean,
         callback: (Result<Unit>) -> Unit
     ) {
         try {
             ParameterValidator.validatePrinterConnection(printer)
             ParameterValidator.validateHtmlContent(html, width)
-            
-            // Simple HTML to Bitmap conversion on main thread - like original
+
+            // Возвращаем прежний стабильный быстрый путь рендеринга HTML,
+            // чтобы избежать таймаутов Html2Bitmap из дополнительной логики ожидания.
             val content = WebViewContent.html(html)
             val bitmap = Html2Bitmap.Builder()
                 .setBitmapWidth(width.toInt())
@@ -244,17 +249,23 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 .setContext(applicationContext)
                 .build()
                 .bitmap
-            
+
             if (bitmap == null) {
                 callback(Result.failure(Exception("Failed to generate bitmap from HTML")))
                 return
             }
-            
+
+            val bitmapForPrint = if (upsideDown) {
+                rotateBitmap180(bitmap)
+            } else {
+                bitmap
+            }
+
             connectionManager.executeWithPrintCompletion(printer, { connection ->
-                val curPrinter = net.posprinter.POSPrinter(connection)
-                curPrinter.initializePrinter()
-                curPrinter.printBitmap(bitmap, net.posprinter.POSConst.ALIGNMENT_LEFT, width.toInt())
-                curPrinter.cutHalfAndFeed(1)
+                val escPrinter = net.posprinter.POSPrinter(connection)
+                escPrinter.initializePrinter()
+                escPrinter.printBitmap(bitmapForPrint, net.posprinter.POSConst.ALIGNMENT_LEFT, width.toInt())
+                escPrinter.cutHalfAndFeed(1)
             }, callback)
             
         } catch (e: Exception) {
@@ -293,7 +304,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validatePrintData(labelCommands, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printZplRawData(connection, labelCommands, width)
+                printerOperations.printZplRawData(connection, labelCommands, width, false)
             }, callback)
             
         } catch (e: Exception) {
@@ -311,29 +322,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         try {
             ParameterValidator.validatePrinterConnection(printer)
             ParameterValidator.validateHtmlContent(html, width)
-            
-            // Simple HTML to Bitmap conversion - like original
-            val content = WebViewContent.html(html)
-            val bitmap = Html2Bitmap.Builder()
-                .setBitmapWidth(width.toInt())
-                .setContent(content)
-                .setTextZoom(100)
-                .setStrictMode(true)
-                .setContext(applicationContext)
-                .build()
-                .bitmap
-            
-            if (bitmap == null) {
-                callback(Result.failure(Exception("Failed to generate bitmap from HTML")))
-                return
-            }
-            
-            connectionManager.executeWithPrintCompletion(printer, { connection ->
-                val zplPrinter = net.posprinter.ZPLPrinter(connection)
-                zplPrinter.setPrinterWidth(width.toInt())
-                zplPrinter.addStart()
-                zplPrinter.printBmpCompress(0, 0, bitmap, width.toInt(), net.posprinter.model.AlgorithmType.Dithering)
-                zplPrinter.addEnd()
+
+            connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
+                printerOperations.printZplHtml(connection, html, width, false)
             }, callback)
             
         } catch (e: Exception) {
@@ -349,23 +340,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         pluginScope.launch {
             try {
                 ParameterValidator.validatePrinterConnection(printer)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            val result = printerOperations.getZplPrinterStatus(connection)
-                            callback(Result.success(result))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Get ZPL printer status failed", e)
-                            val errorResult = ZPLStatusResult(
-                                success = false,
-                                code = -1,
-                                errorMessage = "Get ZPL status failed: ${e.message}"
-                            )
-                            callback(Result.success(errorResult))
-                        }
-                    }
+
+                var result: ZPLStatusResult? = null
+                connectionManager.executeWithSuspendConnection(printer) { connection ->
+                    result = printerOperations.getZplPrinterStatus(connection)
                 }
+
+                callback(Result.success(result ?: ZPLStatusResult(
+                    success = false,
+                    code = -1,
+                    errorMessage = "Get ZPL status failed: empty result"
+                )))
             } catch (e: Exception) {
                 Log.e(TAG, "Get ZPL printer status validation failed", e)
                 val errorResult = ZPLStatusResult(
@@ -389,7 +374,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validatePrintData(labelCommands, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printTsplRawData(connection, labelCommands, width)
+                printerOperations.printTsplRawData(connection, labelCommands, width, false)
             }, callback)
             
         } catch (e: Exception) {
@@ -409,7 +394,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validateHtmlContent(html, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printTsplHtml(connection, html, width)
+                printerOperations.printTsplHtml(connection, html, width, false)
             }, callback)
             
         } catch (e: Exception) {
@@ -425,23 +410,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         pluginScope.launch {
             try {
                 ParameterValidator.validatePrinterConnection(printer)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            val result = printerOperations.getTsplPrinterStatus(connection)
-                            callback(Result.success(result))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Get TSPL printer status failed", e)
-                            val errorResult = TSPLStatusResult(
-                                success = false,
-                                code = -1,
-                                errorMessage = "Get TSPL status failed: ${e.message}"
-                            )
-                            callback(Result.success(errorResult))
-                        }
-                    }
+
+                var result: TSPLStatusResult? = null
+                connectionManager.executeWithSuspendConnection(printer) { connection ->
+                    result = printerOperations.getTsplPrinterStatus(connection)
                 }
+
+                callback(Result.success(result ?: TSPLStatusResult(
+                    success = false,
+                    code = -1,
+                    errorMessage = "Get TSPL status failed: empty result"
+                )))
             } catch (e: Exception) {
                 Log.e(TAG, "Get TSPL printer status validation failed", e)
                 val errorResult = TSPLStatusResult(
@@ -461,21 +440,24 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         pluginScope.launch {
             try {
                 ParameterValidator.validatePrinterConnection(printer)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            val result = printerOperations.getPrinterSerialNumber(connection)
-                            callback(Result.success(result))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Get printer SN failed", e)
-                            callback(Result.failure(Exception("Get printer SN failed: ${e.message}")))
-                        }
-                    }
+
+                var result: StringResult? = null
+                connectionManager.executeWithSuspendConnection(printer) { connection ->
+                    result = printerOperations.getPrinterSerialNumber(connection)
                 }
+
+                callback(Result.success(result ?: StringResult(
+                    success = false,
+                    errorMessage = "Get printer SN failed: empty result",
+                    value = null
+                )))
             } catch (e: Exception) {
                 Log.e(TAG, "Get printer SN validation failed", e)
-                callback(Result.failure(Exception("Get printer SN validation failed: ${e.message}")))
+                callback(Result.success(StringResult(
+                    success = false,
+                    errorMessage = "Get printer SN failed: ${e.message}",
+                    value = null
+                )))
             }
         }
     }
@@ -487,23 +469,17 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         pluginScope.launch {
             try {
                 ParameterValidator.validatePrinterConnection(printer)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            val result = printerOperations.getPrinterStatus(connection)
-                            callback(Result.success(result))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Get printer status failed", e)
-                            val errorResult = StatusResult(
-                                success = false,
-                                status = "Error: ${e.message}",
-                                errorMessage = "Failed to get printer status: ${e.message}"
-                            )
-                            callback(Result.success(errorResult))
-                        }
-                    }
+
+                var result: StatusResult? = null
+                connectionManager.executeWithSuspendConnection(printer) { connection ->
+                    result = printerOperations.getPrinterStatus(connection)
                 }
+
+                callback(Result.success(result ?: StatusResult(
+                    success = false,
+                    status = "Error: empty result",
+                    errorMessage = "Failed to get printer status: empty result"
+                )))
             } catch (e: Exception) {
                 Log.e(TAG, "Get printer status validation failed", e)
                 val errorResult = StatusResult(
@@ -525,18 +501,11 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             try {
                 ParameterValidator.validatePrinterConnection(printer)
                 ParameterValidator.validateNetworkSettings(netSettings)
-                
-                connectionManager.executeWithConnection(printer) { connection ->
-                    pluginScope.launch {
-                        try {
-                            printerOperations.setNetworkSettings(connection, netSettings)
-                            callback(Result.success(Unit))
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Set network settings failed", e)
-                            callback(Result.failure(Exception("Set network settings failed: ${e.message}")))
-                        }
-                    }
+
+                connectionManager.executeWithSuspendConnection(printer) { connection ->
+                    printerOperations.setNetworkSettings(connection, netSettings)
                 }
+                callback(Result.success(Unit))
             } catch (e: Exception) {
                 Log.e(TAG, "Set network settings validation failed", e)
                 callback(Result.failure(Exception("Set network settings validation failed: ${e.message}")))
@@ -618,5 +587,12 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 callback(Result.failure(Exception("TCP printer discovery failed: ${e.message}")))
             }
         }
+    }
+
+    private fun rotateBitmap180(source: Bitmap): Bitmap {
+        val matrix = Matrix().apply {
+            postRotate(180f)
+        }
+        return Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
     }
 }

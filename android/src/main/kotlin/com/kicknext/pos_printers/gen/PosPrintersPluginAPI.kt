@@ -396,8 +396,8 @@ interface POSPrintersApi {
   fun getPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<StatusResult>) -> Unit)
   fun getPrinterSN(printer: PrinterConnectionParamsDTO, callback: (Result<StringResult>) -> Unit)
   fun openCashBox(printer: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
-  fun printHTML(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
-  fun printData(printer: PrinterConnectionParamsDTO, data: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
+  fun printHTML(printer: PrinterConnectionParamsDTO, html: String, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
+  fun printData(printer: PrinterConnectionParamsDTO, data: ByteArray, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
   fun setNetSettingsToPrinter(printer: PrinterConnectionParamsDTO, netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
   fun configureNetViaUDP(netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
   fun printZplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
@@ -583,7 +583,8 @@ interface POSPrintersApi {
             val printerArg = args[0] as PrinterConnectionParamsDTO
             val htmlArg = args[1] as String
             val widthArg = args[2] as Long
-            api.printHTML(printerArg, htmlArg, widthArg) { result: Result<Unit> ->
+            val upsideDownArg = args[3] as Boolean
+            api.printHTML(printerArg, htmlArg, widthArg, upsideDownArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
@@ -605,7 +606,8 @@ interface POSPrintersApi {
             val printerArg = args[0] as PrinterConnectionParamsDTO
             val dataArg = args[1] as ByteArray
             val widthArg = args[2] as Long
-            api.printData(printerArg, dataArg, widthArg) { result: Result<Unit> ->
+            val upsideDownArg = args[3] as Boolean
+            api.printData(printerArg, dataArg, widthArg, upsideDownArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))

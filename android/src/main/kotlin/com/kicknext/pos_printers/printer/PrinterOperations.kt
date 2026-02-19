@@ -29,13 +29,21 @@ class PrinterOperations(private val context: Context) {
     suspend fun printRawData(
         connection: IDeviceConnection,
         data: ByteArray,
-        width: Long
+        width: Long,
+        upsideDown: Boolean
     ) = withContext(Dispatchers.IO) {
         validatePrinterReady(connection)
-        
+
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        printer.sendData(data)
+        try {
+            applyEscPosUpsideDown(printer, upsideDown)
+            printer.sendData(data)
+        } finally {
+            // 2.31: inverted printing mode should be explicitly canceled after job.
+            // This avoids mode leakage to the next operation.
+            applyEscPosUpsideDown(printer, false)
+        }
         
         Log.d(TAG, "Raw data printed successfully, ${data.size} bytes")
     }
@@ -46,7 +54,8 @@ class PrinterOperations(private val context: Context) {
     suspend fun printHtml(
         connection: IDeviceConnection,
         html: String,
-        width: Long
+        width: Long,
+        upsideDown: Boolean
     ) = withContext(Dispatchers.IO) {
         validatePrinterReady(connection)
         
@@ -101,6 +110,7 @@ class PrinterOperations(private val context: Context) {
         
         val printer = POSPrinter(connection)
         printer.initializePrinter()
+        applyEscPosUpsideDown(printer, upsideDown)
         printer.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
         printer.cutHalfAndFeed(1)
         
@@ -142,11 +152,13 @@ class PrinterOperations(private val context: Context) {
     suspend fun printZplRawData(
         connection: IDeviceConnection,
         labelCommands: ByteArray,
-        width: Long
+        width: Long,
+        upsideDown: Boolean
     ) = withContext(Dispatchers.IO) {
         validateZplPrinterReady(connection)
         
         val zplPrinter = ZPLPrinter(connection)
+        applyZplUpsideDown(zplPrinter, upsideDown)
         zplPrinter.sendData(labelCommands)
         
         Log.d(TAG, "ZPL raw data printed successfully, ${labelCommands.size} bytes")
@@ -158,7 +170,8 @@ class PrinterOperations(private val context: Context) {
     suspend fun printZplHtml(
         connection: IDeviceConnection,
         html: String,
-        width: Long
+        width: Long,
+        upsideDown: Boolean
     ) = withContext(Dispatchers.IO) {
         validateZplPrinterReady(connection)
         
@@ -190,6 +203,7 @@ class PrinterOperations(private val context: Context) {
         }
         
         val zplPrinter = ZPLPrinter(connection)
+        applyZplUpsideDown(zplPrinter, upsideDown)
         zplPrinter.setPrinterWidth(width.toInt())
         zplPrinter.addStart()
         zplPrinter.printBmpCompress(0, 0, bitmap, width.toInt(), AlgorithmType.Dithering)
@@ -204,11 +218,13 @@ class PrinterOperations(private val context: Context) {
     suspend fun printTsplRawData(
         connection: IDeviceConnection,
         labelCommands: ByteArray,
-        width: Long
+        width: Long,
+        upsideDown: Boolean
     ) = withContext(Dispatchers.IO) {
         validateTsplPrinterReady(connection)
         
         val tsplPrinter = TSPLPrinter(connection)
+        applyTsplUpsideDown(tsplPrinter, upsideDown)
         tsplPrinter.sendData(labelCommands)
         
         Log.d(TAG, "TSPL raw data printed successfully, ${labelCommands.size} bytes")
@@ -220,7 +236,8 @@ class PrinterOperations(private val context: Context) {
     suspend fun printTsplHtml(
         connection: IDeviceConnection,
         html: String,
-        width: Long
+        width: Long,
+        upsideDown: Boolean
     ) = withContext(Dispatchers.IO) {
         validateTsplPrinterReady(connection)
         
@@ -252,6 +269,7 @@ class PrinterOperations(private val context: Context) {
         }
         
         val tsplPrinter = TSPLPrinter(connection)
+        applyTsplUpsideDown(tsplPrinter, upsideDown)
         tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
         tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
         tsplPrinter.cls()
@@ -348,30 +366,37 @@ class PrinterOperations(private val context: Context) {
     suspend fun getPrinterSerialNumber(connection: IDeviceConnection): StringResult = withContext(Dispatchers.IO) {
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        
-        val serialBytes = suspendCoroutine<ByteArray?> { continuation ->
-            try {
-                printer.getSerialNumber { sn ->
-                    continuation.resume(sn)
+
+        val serialBytes = withTimeoutOrNull(STATUS_CHECK_TIMEOUT_MS) {
+            suspendCoroutine<ByteArray?> { continuation ->
+                try {
+                    printer.getSerialNumber { sn ->
+                        continuation.resume(sn)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error getting printer serial number", e)
+                    continuation.resume(null)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error getting printer serial number", e)
-                continuation.resume(null)
             }
         }
-        
-        if (serialBytes == null) {
-            throw Exception("Failed to retrieve printer serial number")
+
+        if (serialBytes == null || serialBytes.isEmpty()) {
+            return@withContext StringResult(
+                success = false,
+                errorMessage = "Serial number is unavailable for this printer/protocol",
+                value = null
+            )
         }
-        
-        val serialNumber = try {
-            String(serialBytes, charset("GBK")).takeIf { it.isNotBlank() }
-                ?: String(serialBytes, Charsets.UTF_8).takeIf { it.isNotBlank() }
-                ?: throw Exception("Empty serial number")
-        } catch (e: Exception) {
-            throw Exception("Failed to decode serial number: ${e.message}")
+
+        val serialNumber = decodeSerialNumber(serialBytes)
+        if (serialNumber == null) {
+            return@withContext StringResult(
+                success = false,
+                errorMessage = "Failed to decode serial number",
+                value = null
+            )
         }
-        
+
         StringResult(success = true, value = serialNumber)
     }
     
@@ -429,6 +454,76 @@ class PrinterOperations(private val context: Context) {
             )
         } catch (e: NumberFormatException) {
             throw IllegalArgumentException("Invalid IP address format: $ipString", e)
+        }
+    }
+
+    private fun decodeSerialNumber(serialBytes: ByteArray): String? {
+        val candidates = listOf(
+            runCatching { String(serialBytes, charset("GBK")) }.getOrNull(),
+            runCatching { String(serialBytes, Charsets.UTF_8) }.getOrNull(),
+            runCatching { String(serialBytes, Charsets.ISO_8859_1) }.getOrNull(),
+        )
+
+        for (candidate in candidates) {
+            val cleaned = candidate
+                ?.replace("\u0000", "")
+                ?.trim()
+                ?.takeIf { value -> value.isNotEmpty() }
+            if (cleaned != null) {
+                return cleaned
+            }
+        }
+        return null
+    }
+
+    private fun applyEscPosUpsideDown(
+        printer: POSPrinter,
+        upsideDown: Boolean
+    ) {
+        printer.setTurnUpsideDownMode(upsideDown)
+    }
+
+    private fun applyZplUpsideDown(
+        printer: ZPLPrinter,
+        upsideDown: Boolean
+    ) {
+        val orientation = if (upsideDown) {
+            resolveZplOrientationConstant("ROTATION_180", "I")
+        } else {
+            resolveZplOrientationConstant("ROTATION_0", "N")
+        }
+        printer.setPrintOrientation(orientation)
+    }
+
+    private fun applyTsplUpsideDown(
+        printer: TSPLPrinter,
+        upsideDown: Boolean
+    ) {
+        val direction = if (upsideDown) {
+            resolveTsplDirectionConstant("DIRECTION_REVERSE", 1)
+        } else {
+            resolveTsplDirectionConstant("DIRECTION_FORWARD", 0)
+        }
+        printer.direction(direction)
+    }
+
+    private fun resolveZplOrientationConstant(fieldName: String, fallback: String): String {
+        return runCatching {
+            val constantsClass = Class.forName("net.posprinter.ZPLConst")
+            constantsClass.getField(fieldName).get(null) as String
+        }.getOrElse {
+            Log.w(TAG, "Failed to resolve ZPL constant '$fieldName', fallback='$fallback'", it)
+            fallback
+        }
+    }
+
+    private fun resolveTsplDirectionConstant(fieldName: String, fallback: Int): Int {
+        return runCatching {
+            val constantsClass = Class.forName("net.posprinter.TSPLConst")
+            constantsClass.getField(fieldName).getInt(null)
+        }.getOrElse {
+            Log.w(TAG, "Failed to resolve TSPL constant '$fieldName', fallback=$fallback", it)
+            fallback
         }
     }
     
