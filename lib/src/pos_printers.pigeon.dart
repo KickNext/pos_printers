@@ -15,7 +15,8 @@ PlatformException _createConnectionError(String channelName) {
   );
 }
 
-List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty = false}) {
+List<Object?> wrapResponse(
+    {Object? result, PlatformException? error, bool empty = false}) {
   if (empty) {
     return <Object?>[];
   }
@@ -310,7 +311,6 @@ class UsbPermissionResult {
   }
 }
 
-
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -318,31 +318,31 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    }    else if (value is PosPrinterConnectionType) {
+    } else if (value is PosPrinterConnectionType) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is PrinterConnectionParamsDTO) {
+    } else if (value is PrinterConnectionParamsDTO) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    }    else if (value is UsbParams) {
+    } else if (value is UsbParams) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    }    else if (value is NetworkParams) {
+    } else if (value is NetworkParams) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    }    else if (value is ZPLStatusResult) {
+    } else if (value is ZPLStatusResult) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is TSPLStatusResult) {
+    } else if (value is TSPLStatusResult) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is StatusResult) {
+    } else if (value is StatusResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is StringResult) {
+    } else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is UsbPermissionResult) {
+    } else if (value is UsbPermissionResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else {
@@ -353,24 +353,24 @@ class _PigeonCodec extends StandardMessageCodec {
   @override
   Object? readValueOfType(int type, ReadBuffer buffer) {
     switch (type) {
-      case 129: 
+      case 129:
         final int? value = readValue(buffer) as int?;
         return value == null ? null : PosPrinterConnectionType.values[value];
-      case 130: 
+      case 130:
         return PrinterConnectionParamsDTO.decode(readValue(buffer)!);
-      case 131: 
+      case 131:
         return UsbParams.decode(readValue(buffer)!);
-      case 132: 
+      case 132:
         return NetworkParams.decode(readValue(buffer)!);
-      case 133: 
+      case 133:
         return ZPLStatusResult.decode(readValue(buffer)!);
-      case 134: 
+      case 134:
         return TSPLStatusResult.decode(readValue(buffer)!);
-      case 135: 
+      case 135:
         return StatusResult.decode(readValue(buffer)!);
-      case 136: 
+      case 136:
         return StringResult.decode(readValue(buffer)!);
-      case 137: 
+      case 137:
         return UsbPermissionResult.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -382,9 +382,11 @@ class POSPrintersApi {
   /// Constructor for [POSPrintersApi].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  POSPrintersApi({BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
+  POSPrintersApi(
+      {BinaryMessenger? binaryMessenger, String messageChannelSuffix = ''})
       : pigeonVar_binaryMessenger = binaryMessenger,
-        pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+        pigeonVar_messageChannelSuffix =
+            messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
   final BinaryMessenger? pigeonVar_binaryMessenger;
 
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
@@ -395,8 +397,10 @@ class POSPrintersApi {
   /// Это необходимо вызывать перед любыми операциями с USB принтером в Android.
   /// Возвращает [UsbPermissionResult] с информацией о результате запроса.
   Future<UsbPermissionResult> requestUsbPermission(UsbParams usbDevice) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.requestUsbPermission$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.requestUsbPermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -424,8 +428,10 @@ class POSPrintersApi {
   /// Проверяет, есть ли уже разрешение на использование USB устройства.
   /// Не показывает диалог пользователю, только проверяет текущее состояние.
   Future<UsbPermissionResult> hasUsbPermission(UsbParams usbDevice) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.hasUsbPermission$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.hasUsbPermission$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -451,8 +457,10 @@ class POSPrintersApi {
   }
 
   Future<void> startDiscoverAllUsbPrinters() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoverAllUsbPrinters$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoverAllUsbPrinters$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -473,8 +481,10 @@ class POSPrintersApi {
   }
 
   Future<void> startDiscoveryXprinterSDKNetworkPrinters() async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryXprinterSDKNetworkPrinters$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryXprinterSDKNetworkPrinters$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -495,8 +505,10 @@ class POSPrintersApi {
   }
 
   Future<void> startDiscoveryTCPNetworkPrinters(int port) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryTCPNetworkPrinters$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryTCPNetworkPrinters$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -516,9 +528,12 @@ class POSPrintersApi {
     }
   }
 
-  Future<StatusResult> getPrinterStatus(PrinterConnectionParamsDTO printer) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterStatus$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<StatusResult> getPrinterStatus(
+      PrinterConnectionParamsDTO printer) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterStatus$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -544,8 +559,10 @@ class POSPrintersApi {
   }
 
   Future<StringResult> getPrinterSN(PrinterConnectionParamsDTO printer) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterSN$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterSN$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -571,8 +588,10 @@ class POSPrintersApi {
   }
 
   Future<void> openCashBox(PrinterConnectionParamsDTO printer) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.openCashBox$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.openCashBox$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -592,15 +611,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> printHTML(PrinterConnectionParamsDTO printer, String html, int width, bool upsideDown) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printHTML$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> printHTML(PrinterConnectionParamsDTO printer, String html,
+      int width, bool upsideDown) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printHTML$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, html, width, upsideDown]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, html, width, upsideDown]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -614,15 +636,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> printData(PrinterConnectionParamsDTO printer, Uint8List data, int width, bool upsideDown) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printData$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> printData(PrinterConnectionParamsDTO printer, Uint8List data,
+      int width, bool upsideDown) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printData$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, data, width, upsideDown]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, data, width, upsideDown]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -636,15 +661,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> setNetSettingsToPrinter(PrinterConnectionParamsDTO printer, NetworkParams netSettings) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.setNetSettingsToPrinter$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> setNetSettingsToPrinter(
+      PrinterConnectionParamsDTO printer, NetworkParams netSettings) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.setNetSettingsToPrinter$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_channel.send(<Object?>[printer, netSettings]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, netSettings]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -659,8 +687,10 @@ class POSPrintersApi {
   }
 
   Future<void> configureNetViaUDP(NetworkParams netSettings) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.configureNetViaUDP$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.configureNetViaUDP$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -680,15 +710,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> printZplRawData(PrinterConnectionParamsDTO printer, Uint8List labelCommands, int width) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printZplRawData$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> printZplRawData(PrinterConnectionParamsDTO printer,
+      Uint8List labelCommands, int width) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printZplRawData$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-      await pigeonVar_channel.send(<Object?>[printer, labelCommands, width]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, labelCommands, width]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -702,15 +735,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> printZplHtml(PrinterConnectionParamsDTO printer, String html, int width) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printZplHtml$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> printZplHtml(
+      PrinterConnectionParamsDTO printer, String html, int width) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printZplHtml$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-      await pigeonVar_channel.send(<Object?>[printer, html, width]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, html, width]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -724,9 +760,12 @@ class POSPrintersApi {
     }
   }
 
-  Future<ZPLStatusResult> getZPLPrinterStatus(PrinterConnectionParamsDTO printer) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getZPLPrinterStatus$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<ZPLStatusResult> getZPLPrinterStatus(
+      PrinterConnectionParamsDTO printer) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.getZPLPrinterStatus$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -751,15 +790,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> printTsplRawData(PrinterConnectionParamsDTO printer, Uint8List labelCommands, int width) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplRawData$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> printTsplRawData(PrinterConnectionParamsDTO printer,
+      Uint8List labelCommands, int width) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplRawData$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-      await pigeonVar_channel.send(<Object?>[printer, labelCommands, width]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, labelCommands, width]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -773,15 +815,18 @@ class POSPrintersApi {
     }
   }
 
-  Future<void> printTsplHtml(PrinterConnectionParamsDTO printer, String html, int width) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplHtml$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<void> printTsplHtml(
+      PrinterConnectionParamsDTO printer, String html, int width) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplHtml$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final List<Object?>? pigeonVar_replyList =
-      await pigeonVar_channel.send(<Object?>[printer, html, width]) as List<Object?>?;
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, html, width]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {
@@ -795,9 +840,12 @@ class POSPrintersApi {
     }
   }
 
-  Future<TSPLStatusResult> getTSPLPrinterStatus(PrinterConnectionParamsDTO printer) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.pos_printers.POSPrintersApi.getTSPLPrinterStatus$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+  Future<TSPLStatusResult> getTSPLPrinterStatus(
+      PrinterConnectionParamsDTO printer) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.getTSPLPrinterStatus$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
@@ -837,20 +885,29 @@ abstract class PrinterDiscoveryEventsApi {
 
   void onPrinterDetached(PrinterConnectionParamsDTO printer);
 
-  static void setUp(PrinterDiscoveryEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
-    messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+  static void setUp(
+    PrinterDiscoveryEventsApi? api, {
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) {
+    messageChannelSuffix =
+        messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound$messageChannelSuffix', pigeonChannelCodec,
+      final BasicMessageChannel<
+          Object?> pigeonVar_channel = BasicMessageChannel<
+              Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final PrinterConnectionParamsDTO? arg_printer = (args[0] as PrinterConnectionParamsDTO?);
+          final PrinterConnectionParamsDTO? arg_printer =
+              (args[0] as PrinterConnectionParamsDTO?);
           assert(arg_printer != null,
               'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterFound was null, expected non-null PrinterConnectionParamsDTO.');
           try {
@@ -858,22 +915,26 @@ abstract class PrinterDiscoveryEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete$messageChannelSuffix', pigeonChannelCodec,
+      final BasicMessageChannel<
+          Object?> pigeonVar_channel = BasicMessageChannel<
+              Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete was null.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryComplete was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final bool? arg_success = (args[0] as bool?);
           assert(arg_success != null,
@@ -883,22 +944,26 @@ abstract class PrinterDiscoveryEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryError$messageChannelSuffix', pigeonChannelCodec,
+      final BasicMessageChannel<
+          Object?> pigeonVar_channel = BasicMessageChannel<
+              Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryError$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryError was null.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onDiscoveryError was null.');
           final List<Object?> args = (message as List<Object?>?)!;
           final String? arg_errorMessage = (args[0] as String?);
           assert(arg_errorMessage != null,
@@ -908,24 +973,29 @@ abstract class PrinterDiscoveryEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached$messageChannelSuffix', pigeonChannelCodec,
+      final BasicMessageChannel<
+          Object?> pigeonVar_channel = BasicMessageChannel<
+              Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached was null.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final PrinterConnectionParamsDTO? arg_printer = (args[0] as PrinterConnectionParamsDTO?);
+          final PrinterConnectionParamsDTO? arg_printer =
+              (args[0] as PrinterConnectionParamsDTO?);
           assert(arg_printer != null,
               'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterAttached was null, expected non-null PrinterConnectionParamsDTO.');
           try {
@@ -933,24 +1003,29 @@ abstract class PrinterDiscoveryEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }
     }
     {
-      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached$messageChannelSuffix', pigeonChannelCodec,
+      final BasicMessageChannel<
+          Object?> pigeonVar_channel = BasicMessageChannel<
+              Object?>(
+          'dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached$messageChannelSuffix',
+          pigeonChannelCodec,
           binaryMessenger: binaryMessenger);
       if (api == null) {
         pigeonVar_channel.setMessageHandler(null);
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           assert(message != null,
-          'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached was null.');
+              'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached was null.');
           final List<Object?> args = (message as List<Object?>?)!;
-          final PrinterConnectionParamsDTO? arg_printer = (args[0] as PrinterConnectionParamsDTO?);
+          final PrinterConnectionParamsDTO? arg_printer =
+              (args[0] as PrinterConnectionParamsDTO?);
           assert(arg_printer != null,
               'Argument for dev.flutter.pigeon.pos_printers.PrinterDiscoveryEventsApi.onPrinterDetached was null, expected non-null PrinterConnectionParamsDTO.');
           try {
@@ -958,8 +1033,9 @@ abstract class PrinterDiscoveryEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          }          catch (e) {
-            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          } catch (e) {
+            return wrapResponse(
+                error: PlatformException(code: 'error', message: e.toString()));
           }
         });
       }

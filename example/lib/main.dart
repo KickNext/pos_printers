@@ -35,7 +35,8 @@ class PosPrintersDemoScreen extends StatefulWidget {
 class _PosPrintersDemoScreenState extends State<PosPrintersDemoScreen>
     with SingleTickerProviderStateMixin {
   final PosPrintersManager _manager = PosPrintersManager();
-  final List<PrinterConnectionParamsDTO> _printers = <PrinterConnectionParamsDTO>[];
+  final List<PrinterConnectionParamsDTO> _printers =
+      <PrinterConnectionParamsDTO>[];
   final List<String> _logs = <String>[];
   StreamSubscription<PrinterConnectionEvent>? _connectionEventsSubscription;
 
@@ -44,11 +45,11 @@ class _PosPrintersDemoScreenState extends State<PosPrintersDemoScreen>
   PrinterConnectionParamsDTO? _selectedPrinter;
   bool _isDiscovering = false;
   bool _upsideDown = false;
-    bool _isStressRunning = false;
+  bool _isStressRunning = false;
 
-    final TextEditingController _stressIterationsController =
+  final TextEditingController _stressIterationsController =
       TextEditingController(text: '20');
-    final TextEditingController _stressConcurrencyController =
+  final TextEditingController _stressConcurrencyController =
       TextEditingController(text: '4');
 
   final TextEditingController _escHtmlController = TextEditingController(
@@ -70,15 +71,22 @@ class _PosPrintersDemoScreenState extends State<PosPrintersDemoScreen>
     text: _defaultTsplRaw,
   );
 
-  final TextEditingController _udpIpController = TextEditingController(text: '192.168.2.217');
-  final TextEditingController _udpMaskController = TextEditingController(text: '255.255.255.0');
-  final TextEditingController _udpGatewayController = TextEditingController(text: '192.168.2.1');
-  final TextEditingController _udpMacController = TextEditingController(text: '');
+  final TextEditingController _udpIpController =
+      TextEditingController(text: '192.168.2.217');
+  final TextEditingController _udpMaskController =
+      TextEditingController(text: '255.255.255.0');
+  final TextEditingController _udpGatewayController =
+      TextEditingController(text: '192.168.2.1');
+  final TextEditingController _udpMacController =
+      TextEditingController(text: '');
   bool _udpDhcp = true;
 
-  final TextEditingController _setIpController = TextEditingController(text: '192.168.2.217');
-  final TextEditingController _setMaskController = TextEditingController(text: '255.255.255.0');
-  final TextEditingController _setGatewayController = TextEditingController(text: '192.168.2.1');
+  final TextEditingController _setIpController =
+      TextEditingController(text: '192.168.2.217');
+  final TextEditingController _setMaskController =
+      TextEditingController(text: '255.255.255.0');
+  final TextEditingController _setGatewayController =
+      TextEditingController(text: '192.168.2.1');
   bool _setDhcp = true;
 
   int _escWidth = 576;
@@ -195,7 +203,8 @@ PRINT 1
     });
   }
 
-  Future<void> _discover({required PrinterDiscoveryFilter filter, required String name}) async {
+  Future<void> _discover(
+      {required PrinterDiscoveryFilter filter, required String name}) async {
     setState(() {
       _isDiscovering = true;
       _printers.clear();
@@ -232,7 +241,8 @@ PRINT 1
     }
   }
 
-  Future<void> _runWithSelection(String actionName, Future<void> Function(PrinterConnectionParamsDTO printer) action) async {
+  Future<void> _runWithSelection(String actionName,
+      Future<void> Function(PrinterConnectionParamsDTO printer) action) async {
     final printer = _selectedPrinter;
     if (printer == null) {
       _log('Action "$actionName" ignored: no printer selected');
@@ -254,7 +264,8 @@ PRINT 1
         return;
       }
       final result = await _manager.requestUsbPermission(printer.usbParams!);
-      _log('USB permission result: granted=${result.granted}, message=${result.errorMessage ?? '-'}');
+      _log(
+          'USB permission result: granted=${result.granted}, message=${result.errorMessage ?? '-'}');
     });
   }
 
@@ -265,7 +276,8 @@ PRINT 1
         return;
       }
       final result = await _manager.hasUsbPermission(printer.usbParams!);
-      _log('USB permission: granted=${result.granted}, message=${result.errorMessage ?? '-'}');
+      _log(
+          'USB permission: granted=${result.granted}, message=${result.errorMessage ?? '-'}');
     });
   }
 
@@ -345,37 +357,47 @@ PRINT 1
   Future<void> _checkStatus() async {
     await _runWithSelection('Get ESC/POS status', (printer) async {
       final status = await _manager.getPrinterStatus(printer);
-      _log('ESC/POS status: success=${status.success}, status=${status.status}, error=${status.errorMessage}');
+      _log(
+          'ESC/POS status: success=${status.success}, status=${status.status}, error=${status.errorMessage}');
     });
   }
 
   Future<void> _checkSerialNumber() async {
     await _runWithSelection('Get serial number', (printer) async {
       final result = await _manager.getPrinterSN(printer);
-      _log('Serial number: success=${result.success}, value=${result.value}, error=${result.errorMessage}');
+      _log(
+          'Serial number: success=${result.success}, value=${result.value}, error=${result.errorMessage}');
     });
   }
 
   Future<void> _checkZplStatus() async {
     await _runWithSelection('Get ZPL status', (printer) async {
       final result = await _manager.getZPLPrinterStatus(printer);
-      _log('ZPL status: success=${result.success}, code=${result.code}, error=${result.errorMessage}');
+      _log(
+          'ZPL status: success=${result.success}, code=${result.code}, error=${result.errorMessage}');
     });
   }
 
   Future<void> _checkTsplStatus() async {
     await _runWithSelection('Get TSPL status', (printer) async {
       final result = await _manager.getTSPLPrinterStatus(printer);
-      _log('TSPL status: success=${result.success}, code=${result.code}, error=${result.errorMessage}');
+      _log(
+          'TSPL status: success=${result.success}, code=${result.code}, error=${result.errorMessage}');
     });
   }
 
   Future<void> _configureUdp() async {
     final settings = NetworkParams(
       ipAddress: _udpIpController.text.trim(),
-      mask: _udpMaskController.text.trim().isEmpty ? null : _udpMaskController.text.trim(),
-      gateway: _udpGatewayController.text.trim().isEmpty ? null : _udpGatewayController.text.trim(),
-      macAddress: _udpMacController.text.trim().isEmpty ? null : _udpMacController.text.trim(),
+      mask: _udpMaskController.text.trim().isEmpty
+          ? null
+          : _udpMaskController.text.trim(),
+      gateway: _udpGatewayController.text.trim().isEmpty
+          ? null
+          : _udpGatewayController.text.trim(),
+      macAddress: _udpMacController.text.trim().isEmpty
+          ? null
+          : _udpMacController.text.trim(),
       dhcp: _udpDhcp,
     );
 
@@ -401,11 +423,14 @@ PRINT 1
   }
 
   Future<void> _runMultiConnectionStressTest() async {
-    final iterations = int.tryParse(_stressIterationsController.text.trim()) ?? 20;
-    final concurrency = int.tryParse(_stressConcurrencyController.text.trim()) ?? 4;
+    final iterations =
+        int.tryParse(_stressIterationsController.text.trim()) ?? 20;
+    final concurrency =
+        int.tryParse(_stressConcurrencyController.text.trim()) ?? 4;
 
     if (iterations <= 0 || concurrency <= 0) {
-      _log('Stress test input is invalid: iterations and concurrency must be > 0');
+      _log(
+          'Stress test input is invalid: iterations and concurrency must be > 0');
       return;
     }
 
@@ -424,7 +449,9 @@ PRINT 1
       int failedCount = 0;
 
       Future<void> worker(int workerIndex) async {
-        for (int index = workerIndex; index < iterations; index += concurrency) {
+        for (int index = workerIndex;
+            index < iterations;
+            index += concurrency) {
           try {
             final StatusResult result;
             if (printer.connectionType == PosPrinterConnectionType.usb) {
@@ -441,7 +468,8 @@ PRINT 1
               _log('Stress #${index + 1}: success (${result.status})');
             } else {
               failedCount++;
-              _log('Stress #${index + 1}: status failed (${result.errorMessage ?? result.status})');
+              _log(
+                  'Stress #${index + 1}: status failed (${result.errorMessage ?? result.status})');
             }
           } catch (error) {
             failedCount++;
@@ -451,7 +479,8 @@ PRINT 1
       }
 
       try {
-        _log('Stress test started: iterations=$iterations, concurrency=$concurrency');
+        _log(
+            'Stress test started: iterations=$iterations, concurrency=$concurrency');
         await Future.wait(
           List<Future<void>>.generate(
             concurrency,
@@ -596,7 +625,8 @@ PRINT 1
                   itemBuilder: (BuildContext context, int index) {
                     final printer = _printers[index];
                     final selected = _selectedPrinter?.id == printer.id;
-                    final isUsb = printer.connectionType == PosPrinterConnectionType.usb;
+                    final isUsb =
+                        printer.connectionType == PosPrinterConnectionType.usb;
                     return ListTile(
                       selected: selected,
                       leading: Icon(isUsb ? Icons.usb : Icons.wifi),
@@ -604,7 +634,9 @@ PRINT 1
                       subtitle: Text(isUsb
                           ? 'USB: VID=${printer.usbParams?.vendorId} PID=${printer.usbParams?.productId}'
                           : 'Network: ${printer.networkParams?.ipAddress ?? '-'}'),
-                      trailing: selected ? const Icon(Icons.check_circle, color: Colors.green) : null,
+                      trailing: selected
+                          ? const Icon(Icons.check_circle, color: Colors.green)
+                          : null,
                       onTap: () {
                         setState(() {
                           _selectedPrinter = printer;
@@ -684,22 +716,26 @@ PRINT 1
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Multi-Connection Stress Test', style: Theme.of(context).textTheme.titleMedium),
+                Text('Multi-Connection Stress Test',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Row(
                   children: <Widget>[
                     Expanded(
-                      child: _buildTextField(_stressIterationsController, 'Iterations'),
+                      child: _buildTextField(
+                          _stressIterationsController, 'Iterations'),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _buildTextField(_stressConcurrencyController, 'Concurrency'),
+                      child: _buildTextField(
+                          _stressConcurrencyController, 'Concurrency'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton.icon(
-                  onPressed: _isStressRunning ? null : _runMultiConnectionStressTest,
+                  onPressed:
+                      _isStressRunning ? null : _runMultiConnectionStressTest,
                   icon: const Icon(Icons.bolt),
                   label: Text(_isStressRunning
                       ? 'Stress Test Running...'
@@ -742,8 +778,10 @@ PRINT 1
                 DropdownButton<int>(
                   value: _escWidth,
                   items: const <DropdownMenuItem<int>>[
-                    DropdownMenuItem(value: 384, child: Text('58mm (384 dots)')),
-                    DropdownMenuItem(value: 576, child: Text('80mm (576 dots)')),
+                    DropdownMenuItem(
+                        value: 384, child: Text('58mm (384 dots)')),
+                    DropdownMenuItem(
+                        value: 576, child: Text('80mm (576 dots)')),
                   ],
                   onChanged: (int? value) {
                     if (value == null) {
@@ -801,7 +839,8 @@ PRINT 1
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Configure Network via UDP', style: Theme.of(context).textTheme.titleMedium),
+                Text('Configure Network via UDP',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 _buildTextField(_udpIpController, 'IP address'),
                 _buildTextField(_udpMaskController, 'Mask'),
@@ -834,7 +873,8 @@ PRINT 1
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('Set Network to Selected Printer', style: Theme.of(context).textTheme.titleMedium),
+                Text('Set Network to Selected Printer',
+                    style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 _buildTextField(_setIpController, 'IP address'),
                 _buildTextField(_setMaskController, 'Mask'),
@@ -966,7 +1006,8 @@ PRINT 1
                     itemCount: _logs.length,
                     itemBuilder: (BuildContext context, int index) {
                       return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
                         child: Text(
                           _logs[index],
                           style: const TextStyle(fontSize: 12),
