@@ -219,7 +219,11 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validatePrintData(data, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printRawData(connection, data, width, upsideDown)
+                if (upsideDown) {
+                    printerOperations.printRawData(connection, data, width, true)
+                } else {
+                    printerOperations.printRawData(connection, data, width)
+                }
             }, callback)
             
         } catch (e: Exception) {
@@ -304,7 +308,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validatePrintData(labelCommands, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printZplRawData(connection, labelCommands, width, false)
+                printerOperations.printZplRawData(connection, labelCommands, width)
             }, callback)
             
         } catch (e: Exception) {
@@ -324,7 +328,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validateHtmlContent(html, width)
 
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printZplHtml(connection, html, width, false)
+                printerOperations.printZplHtml(connection, html, width)
             }, callback)
             
         } catch (e: Exception) {
@@ -374,7 +378,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validatePrintData(labelCommands, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printTsplRawData(connection, labelCommands, width, false)
+                printerOperations.printTsplRawData(connection, labelCommands, width)
             }, callback)
             
         } catch (e: Exception) {
@@ -394,7 +398,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             ParameterValidator.validateHtmlContent(html, width)
             
             connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
-                printerOperations.printTsplHtml(connection, html, width, false)
+                printerOperations.printTsplHtml(connection, html, width)
             }, callback)
             
         } catch (e: Exception) {

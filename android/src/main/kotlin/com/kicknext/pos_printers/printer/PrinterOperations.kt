@@ -30,19 +30,24 @@ class PrinterOperations(private val context: Context) {
         connection: IDeviceConnection,
         data: ByteArray,
         width: Long,
-        upsideDown: Boolean
+        upsideDown: Boolean = false
     ) = withContext(Dispatchers.IO) {
         validatePrinterReady(connection)
 
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        try {
-            applyEscPosUpsideDown(printer, upsideDown)
+        if (upsideDown) {
+            try {
+                applyEscPosUpsideDown(printer, true)
+                printer.sendData(data)
+            } finally {
+                // 2.31: inverted printing mode should be explicitly canceled after job.
+                // This avoids mode leakage to the next operation.
+                applyEscPosUpsideDown(printer, false)
+            }
+        } else {
+            // Не отправляем команды смены ориентации, чтобы не менять поток исходных байтов.
             printer.sendData(data)
-        } finally {
-            // 2.31: inverted printing mode should be explicitly canceled after job.
-            // This avoids mode leakage to the next operation.
-            applyEscPosUpsideDown(printer, false)
         }
         
         Log.d(TAG, "Raw data printed successfully, ${data.size} bytes")
@@ -110,9 +115,19 @@ class PrinterOperations(private val context: Context) {
         
         val printer = POSPrinter(connection)
         printer.initializePrinter()
-        applyEscPosUpsideDown(printer, upsideDown)
-        printer.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
-        printer.cutHalfAndFeed(1)
+        if (upsideDown) {
+            try {
+                applyEscPosUpsideDown(printer, true)
+                printer.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
+                printer.cutHalfAndFeed(1)
+            } finally {
+                applyEscPosUpsideDown(printer, false)
+            }
+        } else {
+            // Не отправляем команды смены ориентации, чтобы не добавлять служебные байты.
+            printer.printBitmap(bitmap, POSConst.ALIGNMENT_LEFT, width.toInt())
+            printer.cutHalfAndFeed(1)
+        }
         
         Log.d(TAG, "HTML printed successfully")
     }
@@ -153,13 +168,22 @@ class PrinterOperations(private val context: Context) {
         connection: IDeviceConnection,
         labelCommands: ByteArray,
         width: Long,
-        upsideDown: Boolean
+        upsideDown: Boolean = false
     ) = withContext(Dispatchers.IO) {
         validateZplPrinterReady(connection)
         
         val zplPrinter = ZPLPrinter(connection)
-        applyZplUpsideDown(zplPrinter, upsideDown)
-        zplPrinter.sendData(labelCommands)
+        if (upsideDown) {
+            try {
+                applyZplUpsideDown(zplPrinter, true)
+                zplPrinter.sendData(labelCommands)
+            } finally {
+                applyZplUpsideDown(zplPrinter, false)
+            }
+        } else {
+            // Не отправляем команды смены ориентации, чтобы сохранить исходный payload.
+            zplPrinter.sendData(labelCommands)
+        }
         
         Log.d(TAG, "ZPL raw data printed successfully, ${labelCommands.size} bytes")
     }
@@ -171,7 +195,7 @@ class PrinterOperations(private val context: Context) {
         connection: IDeviceConnection,
         html: String,
         width: Long,
-        upsideDown: Boolean
+        upsideDown: Boolean = false
     ) = withContext(Dispatchers.IO) {
         validateZplPrinterReady(connection)
         
@@ -203,11 +227,23 @@ class PrinterOperations(private val context: Context) {
         }
         
         val zplPrinter = ZPLPrinter(connection)
-        applyZplUpsideDown(zplPrinter, upsideDown)
-        zplPrinter.setPrinterWidth(width.toInt())
-        zplPrinter.addStart()
-        zplPrinter.printBmpCompress(0, 0, bitmap, width.toInt(), AlgorithmType.Dithering)
-        zplPrinter.addEnd()
+        if (upsideDown) {
+            try {
+                applyZplUpsideDown(zplPrinter, true)
+                zplPrinter.setPrinterWidth(width.toInt())
+                zplPrinter.addStart()
+                zplPrinter.printBmpCompress(0, 0, bitmap, width.toInt(), AlgorithmType.Dithering)
+                zplPrinter.addEnd()
+            } finally {
+                applyZplUpsideDown(zplPrinter, false)
+            }
+        } else {
+            // Не отправляем команды смены ориентации, чтобы не модифицировать поток команд.
+            zplPrinter.setPrinterWidth(width.toInt())
+            zplPrinter.addStart()
+            zplPrinter.printBmpCompress(0, 0, bitmap, width.toInt(), AlgorithmType.Dithering)
+            zplPrinter.addEnd()
+        }
         
         Log.d(TAG, "ZPL HTML printed successfully")
     }
@@ -219,13 +255,22 @@ class PrinterOperations(private val context: Context) {
         connection: IDeviceConnection,
         labelCommands: ByteArray,
         width: Long,
-        upsideDown: Boolean
+        upsideDown: Boolean = false
     ) = withContext(Dispatchers.IO) {
         validateTsplPrinterReady(connection)
         
         val tsplPrinter = TSPLPrinter(connection)
-        applyTsplUpsideDown(tsplPrinter, upsideDown)
-        tsplPrinter.sendData(labelCommands)
+        if (upsideDown) {
+            try {
+                applyTsplUpsideDown(tsplPrinter, true)
+                tsplPrinter.sendData(labelCommands)
+            } finally {
+                applyTsplUpsideDown(tsplPrinter, false)
+            }
+        } else {
+            // Не отправляем команды смены ориентации, чтобы сохранить исходный payload.
+            tsplPrinter.sendData(labelCommands)
+        }
         
         Log.d(TAG, "TSPL raw data printed successfully, ${labelCommands.size} bytes")
     }
@@ -237,7 +282,7 @@ class PrinterOperations(private val context: Context) {
         connection: IDeviceConnection,
         html: String,
         width: Long,
-        upsideDown: Boolean
+        upsideDown: Boolean = false
     ) = withContext(Dispatchers.IO) {
         validateTsplPrinterReady(connection)
         
@@ -269,12 +314,25 @@ class PrinterOperations(private val context: Context) {
         }
         
         val tsplPrinter = TSPLPrinter(connection)
-        applyTsplUpsideDown(tsplPrinter, upsideDown)
-        tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
-        tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
-        tsplPrinter.cls()
-        tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, width.toInt(), bitmap, AlgorithmType.Dithering)
-        tsplPrinter.print(1)
+        if (upsideDown) {
+            try {
+                applyTsplUpsideDown(tsplPrinter, true)
+                tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
+                tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
+                tsplPrinter.cls()
+                tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, width.toInt(), bitmap, AlgorithmType.Dithering)
+                tsplPrinter.print(1)
+            } finally {
+                applyTsplUpsideDown(tsplPrinter, false)
+            }
+        } else {
+            // Не отправляем команды смены ориентации, чтобы не добавлять служебные байты.
+            tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
+            tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
+            tsplPrinter.cls()
+            tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, width.toInt(), bitmap, AlgorithmType.Dithering)
+            tsplPrinter.print(1)
+        }
         
         Log.d(TAG, "TSPL HTML printed successfully")
     }
