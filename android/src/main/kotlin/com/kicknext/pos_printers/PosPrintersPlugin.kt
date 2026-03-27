@@ -102,6 +102,12 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         applicationContext = flutterPluginBinding.applicationContext
         usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
         
+        // Создаём директорию Crashpad для Android WebView заранее.
+        // На устройствах со старой версией WebView (например, v83 на K15)
+        // отсутствие этой директории приводит к краху Chromium-рендерера
+        // (ERROR:filesystem_posix.cc mkdir .../WebView/Crashpad: No such file or directory).
+        ensureWebViewCrashpadDirectory()
+        
         // Initialize SDK
         POSConnect.init(applicationContext)
         
@@ -136,6 +142,31 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             Log.d(TAG, "PosPrintersPlugin detached successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Error during plugin detachment: ${e.message}")
+        }
+    }
+
+    /**
+     * Создаёт директорию WebView/Crashpad в кэше приложения, если она отсутствует.
+     *
+     * На устройствах со старой версией Android WebView (v83 и ниже) библиотека
+     * html2bitmap создаёт headless WebView для конвертации HTML → Bitmap.
+     * Chromium при инициализации пытается создать Crashpad-директорию для
+     * crash handler, но на некоторых прошивках parent-директория отсутствует.
+     * Это приводит к `mkdir ... No such file or directory (2)`, и через
+     * несколько секунд Chromium renderer process крашится с кодом -1,
+     * уничтожая Flutter rendering surface.
+     *
+     * Превентивное создание директории устраняет эту проблему.
+     */
+    private fun ensureWebViewCrashpadDirectory() {
+        try {
+            val crashpadDir = java.io.File(applicationContext.cacheDir, "WebView/Crashpad")
+            if (!crashpadDir.exists()) {
+                val created = crashpadDir.mkdirs()
+                Log.d(TAG, "WebView Crashpad directory ${if (created) "created" else "already exists"}: ${crashpadDir.absolutePath}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to create WebView Crashpad directory: ${e.message}")
         }
     }
     
