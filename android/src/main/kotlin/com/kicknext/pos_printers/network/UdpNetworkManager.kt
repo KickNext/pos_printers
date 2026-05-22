@@ -2,6 +2,7 @@ package com.kicknext.pos_printers.network
 
 import android.util.Log
 import com.kicknext.pos_printers.ExtendPosUdpNet
+import com.kicknext.pos_printers.domain.UdpNetworkConfig
 import com.kicknext.pos_printers.gen.NetworkParams
 import com.kicknext.pos_printers.validation.ParameterValidator
 import kotlinx.coroutines.Dispatchers
@@ -32,20 +33,27 @@ class UdpNetworkManager {
             gateway = netSettings.gateway ?: throw IllegalArgumentException("Gateway is required")
         )
         
-        val dhcp = netSettings.dhcp ?: throw IllegalArgumentException("DHCP setting is required")
+        val config = UdpNetworkConfig(
+            targetMacAddress = netSettings.macAddress ?: throw IllegalArgumentException("MAC address is required"),
+            ipAddress = netSettings.ipAddress,
+            mask = netSettings.mask ?: throw IllegalArgumentException("Subnet mask is required"),
+            gateway = netSettings.gateway ?: throw IllegalArgumentException("Gateway is required"),
+            dhcp = netSettings.dhcp ?: throw IllegalArgumentException("DHCP setting is required"),
+        )
         
         Log.d(TAG, "Configuring network via UDP: IP=${netSettings.ipAddress}, " +
-                "Mask=${netSettings.mask}, Gateway=${netSettings.gateway}, DHCP=$dhcp")
-        
-        val macBytes = parseMacAddress(netSettings.macAddress!!)
-        val ipBytes = parseIpAddress(netSettings.ipAddress)
-        val maskBytes = parseIpAddress(netSettings.mask!!)
-        val gatewayBytes = parseIpAddress(netSettings.gateway!!)
+                "Mask=${netSettings.mask}, Gateway=${netSettings.gateway}, DHCP=${config.dhcp}")
         
         // Execute UDP configuration with timeout
         val success = withTimeoutOrNull(UDP_TIMEOUT_MS) {
             try {
-                posUdpNet.udpNetConfig(macBytes, ipBytes, maskBytes, gatewayBytes, dhcp)
+                posUdpNet.udpNetConfig(
+                    config.targetMacBytes,
+                    config.ipBytes,
+                    config.maskBytes,
+                    config.gatewayBytes,
+                    config.dhcp,
+                )
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "UDP network configuration failed", e)
@@ -60,33 +68,4 @@ class UdpNetworkManager {
         Log.d(TAG, "Network configuration via UDP completed successfully")
     }
     
-    /**
-     * Parses MAC address string to byte array
-     */
-    private fun parseMacAddress(macString: String): ByteArray {
-        val cleanMac = macString.replace(":", "").replace("-", "")
-        require(cleanMac.length == 12) { "Invalid MAC address length" }
-        
-        return try {
-            (0 until cleanMac.length step 2).map { i ->
-                cleanMac.substring(i, i + 2).toInt(16).toByte()
-            }.toByteArray()
-        } catch (e: NumberFormatException) {
-            throw IllegalArgumentException("Invalid MAC address format: $macString", e)
-        }
-    }
-    
-    /**
-     * Parses IP address string to byte array
-     */
-    private fun parseIpAddress(ipString: String): ByteArray {
-        val parts = ipString.split('.')
-        require(parts.size == 4) { "Invalid IP address format: $ipString" }
-        
-        return try {
-            parts.map { it.toInt().toByte() }.toByteArray()
-        } catch (e: NumberFormatException) {
-            throw IllegalArgumentException("Invalid IP address format: $ipString", e)
-        }
-    }
 }

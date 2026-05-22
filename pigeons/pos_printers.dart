@@ -117,6 +117,22 @@ class UsbPermissionResult {
   });
 }
 
+class TsplLabelMediaDTO {
+  final double widthMm;
+  final double heightMm;
+  final double gapMm;
+  final int dpi;
+  final int bitmapWidthDots;
+
+  TsplLabelMediaDTO({
+    required this.widthMm,
+    required this.heightMm,
+    required this.gapMm,
+    required this.dpi,
+    required this.bitmapWidthDots,
+  });
+}
+
 @HostApi()
 abstract class POSPrintersApi {
   /// Запрашивает разрешение на использование USB устройства у пользователя.
@@ -215,6 +231,14 @@ abstract class POSPrintersApi {
     PrinterConnectionParamsDTO printer,
     String html,
     int width,
+  );
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void printTsplHtmlWithMedia(
+    PrinterConnectionParamsDTO printer,
+    String html,
+    TsplLabelMediaDTO media,
   );
 
   @async

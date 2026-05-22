@@ -16,13 +16,16 @@ import com.kicknext.pos_printers.discovery.UsbPrinterDiscovery
 import com.kicknext.pos_printers.discovery.SdkPrinterDiscovery
 import com.kicknext.pos_printers.discovery.TcpPrinterDiscovery
 import com.kicknext.pos_printers.connection.PrinterConnectionManager
+import com.kicknext.pos_printers.domain.TsplLabelLayout
 import com.kicknext.pos_printers.printer.PrinterOperations
 import com.kicknext.pos_printers.network.UdpNetworkManager
 import com.kicknext.pos_printers.validation.ParameterValidator
 import com.kicknext.pos_printers.permission.UsbPermissionManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import net.posprinter.POSConnect
 
@@ -51,7 +54,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     private lateinit var udpNetworkManager: UdpNetworkManager
     private lateinit var usbPermissionManager: UsbPermissionManager
     
-    private val pluginScope = CoroutineScope(Dispatchers.IO)
+    private lateinit var pluginScope: CoroutineScope
 
     private val usbReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -101,6 +104,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         applicationContext = flutterPluginBinding.applicationContext
         usbManager = applicationContext.getSystemService(Context.USB_SERVICE) as UsbManager
+        pluginScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         
         // Создаём директорию Crashpad для Android WebView заранее.
         // На устройствах со старой версией WebView (например, v83 на K15)
@@ -137,6 +141,9 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         try {
             POSPrintersApi.setUp(binding.binaryMessenger, null)
+            if (::pluginScope.isInitialized) {
+                pluginScope.cancel()
+            }
             applicationContext.unregisterReceiver(usbReceiver)
             usbPermissionManager.unregister()
             Log.d(TAG, "PosPrintersPlugin detached successfully")
@@ -438,6 +445,33 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         }
     }
 
+    override fun printTsplHtmlWithMedia(
+        printer: PrinterConnectionParamsDTO,
+        html: String,
+        media: TsplLabelMediaDTO,
+        callback: (Result<Unit>) -> Unit
+    ) {
+        try {
+            ParameterValidator.validatePrinterConnection(printer)
+            ParameterValidator.validateHtmlContent(html, media.bitmapWidthDots)
+            val layout = TsplLabelLayout.fromMedia(
+                widthMm = media.widthMm,
+                heightMm = media.heightMm,
+                gapMm = media.gapMm,
+                dpi = media.dpi.toInt(),
+                bitmapWidthDots = media.bitmapWidthDots.toInt(),
+            )
+
+            connectionManager.executeWithSuspendPrintCompletion(printer, { connection ->
+                printerOperations.printTsplHtmlWithLayout(connection, html, layout)
+            }, callback)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Print TSPL HTML with media validation failed", e)
+            callback(Result.failure(Exception("Print TSPL HTML with media validation failed: ${e.message}")))
+        }
+    }
+
     override fun getTSPLPrinterStatus(
         printer: PrinterConnectionParamsDTO, 
         callback: (Result<TSPLStatusResult>) -> Unit
@@ -615,7 +649,8 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                     onFinish = {
                         Log.d(TAG, "TCP printer discovery completed")
                         callback(Result.success(Unit))
-                    }
+                    },
+                    port = port.toInt()
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "TCP printer discovery failed", e)

@@ -311,6 +311,47 @@ class UsbPermissionResult {
   }
 }
 
+class TsplLabelMediaDTO {
+  TsplLabelMediaDTO({
+    required this.widthMm,
+    required this.heightMm,
+    required this.gapMm,
+    required this.dpi,
+    required this.bitmapWidthDots,
+  });
+
+  double widthMm;
+
+  double heightMm;
+
+  double gapMm;
+
+  int dpi;
+
+  int bitmapWidthDots;
+
+  Object encode() {
+    return <Object?>[
+      widthMm,
+      heightMm,
+      gapMm,
+      dpi,
+      bitmapWidthDots,
+    ];
+  }
+
+  static TsplLabelMediaDTO decode(Object result) {
+    result as List<Object?>;
+    return TsplLabelMediaDTO(
+      widthMm: result[0]! as double,
+      heightMm: result[1]! as double,
+      gapMm: result[2]! as double,
+      dpi: result[3]! as int,
+      bitmapWidthDots: result[4]! as int,
+    );
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -345,6 +386,9 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is UsbPermissionResult) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
+    } else if (value is TsplLabelMediaDTO) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -372,6 +416,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return StringResult.decode(readValue(buffer)!);
       case 137:
         return UsbPermissionResult.decode(readValue(buffer)!);
+      case 138:
+        return TsplLabelMediaDTO.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -827,6 +873,31 @@ class POSPrintersApi {
     );
     final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
         .send(<Object?>[printer, html, width]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
+    }
+  }
+
+  Future<void> printTsplHtmlWithMedia(PrinterConnectionParamsDTO printer,
+      String html, TsplLabelMediaDTO media) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplHtmlWithMedia$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, html, media]) as List<Object?>?;
     if (pigeonVar_replyList == null) {
       throw _createConnectionError(pigeonVar_channelName);
     } else if (pigeonVar_replyList.length > 1) {

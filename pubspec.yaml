@@ -1,7 +1,8 @@
 name: pos_printers
-description: "Flutter plugin for Android POS printers with USB permission management"
+description: "Android Flutter plugin for ESC/POS, ZPL, and TSPL printers over USB and network connections."
 version: 0.7.2+2026032701
-# homepage:
+repository: https://github.com/KickNext/pos_printers
+issue_tracker: https://github.com/KickNext/pos_printers/issues
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

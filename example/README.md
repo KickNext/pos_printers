@@ -1,213 +1,61 @@
-# pos_printers_example
+# POS Printers Example
 
-Stress-test приложение для демонстрации возможностей плагина `pos_printers`.
+Example Flutter app for exercising the Android plugin against real USB and network printers.
 
-## Возможности
+## What It Covers
 
-### 🔍 Поиск принтеров
+- USB, SDK network, and TCP discovery.
+- USB permission request/check flow.
+- ESC/POS receipt HTML and raw bytes.
+- ZPL HTML and raw labels.
+- TSPL HTML with explicit media geometry.
+- TSPL raw commands with bitmap width derived from media.
+- Status checks and serial number lookup.
+- UDP network configuration with an explicit target MAC address.
+- Multi-connection status stress test.
 
-- **USB принтеры** - Автоматическое обнаружение USB устройств
-- **Network принтеры** - Поиск по локальной сети (SDK/TCP)
+## Run
 
-### 🖨️ Поддержка языков принтеров
-
-- **ESC/POS** - Чековые принтеры (печать чеков, HTML, открытие ящика)
-- **ZPL** - Zebra label printers (текст, штрих-коды, QR-коды)
-- **TSPL** - TSC label printers (текст, штрих-коды, QR-коды)
-
-### ⚡ Функционал
-
-- **Быстрое тестирование** - Кнопки для всех типов принтеров всегда доступны
-- **Stress Test** - Одновременная отправка 10 заданий на печать (5 HTML + 5 RAW)
-- **Проверка статуса** - Мониторинг состояния принтера
-
-## Workflow использования
-
-### 1. Найти принтер
-
-Нажмите кнопку **USB Printers** или **Network Printers** для поиска доступных устройств.
-
-```
-┌─────────────────────────────────────┐
-│ Found Printers:                     │
-├─────────────────────────────────────┤
-│ 🔌 USB Printer                      │
-│    VID:1234 PID:5678               │
-└─────────────────────────────────────┘
+```shell
+cd example
+flutter run
 ```
 
-### 2. Выбрать принтер
+## TSPL Media
 
-Нажмите на карточку принтера в списке найденных устройств.
+The print tab exposes width, height, gap, and DPI fields. These map to:
 
-### 3. Использовать тестовые кнопки
+```dart
+final media = TsplLabelMedia(
+  width: Millimeters(58),
+  height: Millimeters(60),
+  gap: Millimeters(2),
+  dpi: Dpi(203),
+);
 
-Все кнопки для тестирования отображаются сразу после выбора принтера.
-
-#### Для ESC/POS принтеров:
-
-```
-┌─────────────────────────────────────┐
-│ Test Printing:                      │
-├─────────────────────────────────────┤
-│ [Receipt] [Label] [Drawer]          │
-│ [Status]                            │
-└─────────────────────────────────────┘
+await manager.printTsplHtmlOnMedia(printer, html, media);
 ```
 
-- **Receipt** - Тестовый чек на русском
-- **Label** - Этикетка товара
-- **Drawer** - Открытие денежного ящика
-- **Status** - Проверка статуса принтера
+Raw TSPL still needs `SIZE` and `GAP` inside the command payload. The app passes `media.bitmapWidthDots` as the SDK bitmap width.
 
-#### Для ZPL принтеров:
+## Receipt Paper
 
-```
-┌─────────────────────────────────────┐
-│ ZPL Examples: 🔵                    │
-├─────────────────────────────────────┤
-│ [ZPL Text] [Barcode] [QR Code]      │
-└─────────────────────────────────────┘
+ESC/POS printing uses `ReceiptPaper.mm58` or `ReceiptPaper.mm80` through the typed helper methods:
+
+```dart
+await manager.printEscHtmlOnPaper(printer, html, ReceiptPaper.mm80);
+await manager.printEscRawDataOnPaper(printer, bytes, ReceiptPaper.mm58);
 ```
 
-- **ZPL Text** - Простой текст на этикетке
-- **Barcode** - Штрих-код CODE128 "1234567890"
-- **QR Code** - QR-код со ссылкой на flutter.dev
+## Network Configuration
 
-#### Для TSPL принтеров:
+UDP network configuration requires a MAC address. Enter the target printer MAC in the network tab before sending the command. The manager rejects UDP configuration without a target MAC because the native packet cannot be built safely.
 
+## Verification
+
+This app is also used as the Android build host for plugin unit tests:
+
+```shell
+cd example/android
+./gradlew :pos_printers:testDebugUnitTest
 ```
-┌─────────────────────────────────────┐
-│ TSPL Examples: 🟢                   │
-├─────────────────────────────────────┤
-│ [TSPL Text] [Barcode] [QR Code]     │
-└─────────────────────────────────────┘
-```
-
-- **TSPL Text** - Простой текст на этикетке
-- **Barcode** - Штрих-код CODE128 "1234567890"
-- **QR Code** - QR-код со ссылкой на flutter.dev
-
-### 4. Stress Test (для ESC/POS)
-
-Для ESC/POS принтеров доступен стресс-тест:
-
-```
-┌─────────────────────────────────────┐
-│ CLIENT #42                          │
-├─────────────────────────────────────┤
-│ [STRESS TEST (5 HTML + 5 RAW) 80mm] │
-└─────────────────────────────────────┘
-```
-
-При запуске отправляются одновременно:
-
-- 5 HTML чеков (рендеринг через HTML2Bitmap)
-- 5 RAW чеков (прямые ESC/POS команды)
-
-Каждый клиент получает уникальный номер (10-99) при запуске приложения.
-
-## Примеры команд
-
-### ZPL (Zebra)
-
-```zpl
-^XA
-^FO50,50^ADN,36,20^FDHello ZPL!^FS
-^FO50,100^BY2^BCN,100,Y,N,N^FD1234567890^FS
-^XZ
-```
-
-### TSPL (TSC)
-
-```tspl
-SIZE 60 mm, 40 mm
-GAP 2 mm, 0 mm
-DIRECTION 0
-CLS
-TEXT 50,50,"3",0,1,1,"Hello TSPL!"
-BARCODE 50,100,"128",80,1,0,2,2,"1234567890"
-PRINT 1
-```
-
-### ESC/POS (Receipt)
-
-```esc
-0x1B, 0x40,        // Initialize
-0x1B, 0x61, 0x01,  // Center align
-...текст чека...
-0x1D, 0x56, 0x41   // Cut paper
-```
-
-## Архитектура
-
-```
-lib/
-  └── main.dart              # Все в одном файле
-      ├── PrinterTestApp     # MaterialApp
-      └── PrinterTestScreen  # Главный экран
-          ├── _foundPrinters[]           # Список найденных принтеров
-          ├── _selectedPrinter          # Выбранный принтер
-          ├── _discoverUsbPrinters()    # Поиск USB
-          ├── _discoverNetworkPrinters()# Поиск Network
-          ├── _printTestReceipt()       # ESC: Чек
-          ├── _printTestLabel()         # ESC: Этикетка
-          ├── _printZplSimpleText()     # ZPL: Текст
-          ├── _printZplBarcode()        # ZPL: Штрих-код
-          ├── _printZplQRCode()         # ZPL: QR
-          ├── _printTsplSimpleText()    # TSPL: Текст
-          ├── _printTsplBarcode()       # TSPL: Штрих-код
-          ├── _printTsplQRCode()        # TSPL: QR
-          └── _runStressTest()          # ESC: Stress test
-```
-
-## Особенности UI
-
-### Отображение кнопок
-
-Все кнопки ZPL и TSPL отображаются **сразу после выбора принтера**.
-
-### Цветовая кодировка
-
-- **ESC/POS** - Стандартные цвета темы
-- **ZPL** - Синие кнопки (`Colors.blue.shade600`)
-- **TSPL** - Зеленые кнопки (`Colors.green.shade600`)
-- **Drawer** - Коричневая кнопка (`Colors.brown.shade400`)
-- **Stress Test** - Оранжевая кнопка (`Colors.orange`)
-
-## Тестирование
-
-1. Запустите приложение
-2. Подключите принтер (USB или Network)
-3. Найдите принтер через соответствующую кнопку
-4. Выберите принтер из списка
-5. Используйте кнопки для тестирования (все типы доступны сразу)
-
-## Документация плагина
-
-- [README.md](../README.md) - Основная документация плагина
-- [TSPL_USAGE.md](../docs/TSPL_USAGE.md) - Руководство по TSPL API
-- [CHANGELOG.md](../CHANGELOG.md) - История изменений
-
-## Технические детали
-
-### Stress Test
-
-- Использует `Future.wait()` для одновременной отправки всех заданий
-- Генерирует уникальные номера чеков (1-5)
-- Каждый клиент получает случайный ID (10-99) при старте
-- HTML рендеринг через `Html2Bitmap` (Android)
-- RAW команды напрямую через ESC/POS байты
-
-### Label Width
-
-- **ZPL**: 203 DPI
-- **TSPL**: 203 DPI
-- **ESC/POS Receipt**: 576 pixels (80mm)
-- **ESC/POS Label**: 203 DPI
-
-### Supported printers
-
-- **ESC/POS**: Xprinter, Epson TM, Star
-- **ZPL**: Zebra ZT, ZD, GK series
-- **TSPL**: TSC TTP, TSP series

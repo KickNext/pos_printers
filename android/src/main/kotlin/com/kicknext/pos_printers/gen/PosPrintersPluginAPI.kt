@@ -282,6 +282,36 @@ data class UsbPermissionResult (
     )
   }
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class TsplLabelMediaDTO (
+  val widthMm: Double,
+  val heightMm: Double,
+  val gapMm: Double,
+  val dpi: Long,
+  val bitmapWidthDots: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TsplLabelMediaDTO {
+      val widthMm = pigeonVar_list[0] as Double
+      val heightMm = pigeonVar_list[1] as Double
+      val gapMm = pigeonVar_list[2] as Double
+      val dpi = pigeonVar_list[3] as Long
+      val bitmapWidthDots = pigeonVar_list[4] as Long
+      return TsplLabelMediaDTO(widthMm, heightMm, gapMm, dpi, bitmapWidthDots)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      widthMm,
+      heightMm,
+      gapMm,
+      dpi,
+      bitmapWidthDots,
+    )
+  }
+}
 private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -330,6 +360,11 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
           UsbPermissionResult.fromList(it)
         }
       }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          TsplLabelMediaDTO.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -371,6 +406,10 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         stream.write(137)
         writeValue(stream, value.toList())
       }
+      is TsplLabelMediaDTO -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
       else -> super.writeValue(stream, value)
     }
   }
@@ -405,6 +444,7 @@ interface POSPrintersApi {
   fun getZPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<ZPLStatusResult>) -> Unit)
   fun printTsplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
   fun printTsplHtml(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
+  fun printTsplHtmlWithMedia(printer: PrinterConnectionParamsDTO, html: String, media: TsplLabelMediaDTO, callback: (Result<Unit>) -> Unit)
   fun getTSPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<TSPLStatusResult>) -> Unit)
 
   companion object {
@@ -758,6 +798,28 @@ interface POSPrintersApi {
             val htmlArg = args[1] as String
             val widthArg = args[2] as Long
             api.printTsplHtml(printerArg, htmlArg, widthArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.printTsplHtmlWithMedia$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val htmlArg = args[1] as String
+            val mediaArg = args[2] as TsplLabelMediaDTO
+            api.printTsplHtmlWithMedia(printerArg, htmlArg, mediaArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(wrapError(error))
