@@ -17,12 +17,12 @@ object CidrHostPlanner {
             return emptySequence()
         }
 
-        val ipInt = ipBytes.fold(0) { acc, byte -> (acc shl 8) or (byte.toInt() and 0xFF) }
-        val maskInt = -1 shl (32 - prefixLength)
-        val networkInt = ipInt and maskInt
-        val broadcastInt = networkInt or maskInt.inv()
-        val startIp = networkInt + 1
-        val endIp = broadcastInt - 1
+        val ipLong = ipBytes.fold(0L) { acc, byte -> (acc shl 8) or (byte.toLong() and 0xFF) }
+        val maskLong = (0xFFFFFFFFL shl (32 - prefixLength.toInt())) and IPV4_MASK
+        val networkLong = ipLong and maskLong
+        val broadcastLong = networkLong or (maskLong xor IPV4_MASK)
+        val startIp = networkLong + 1
+        val endIp = broadcastLong - 1
 
         if (startIp > endIp) {
             return emptySequence()
@@ -30,21 +30,38 @@ object CidrHostPlanner {
 
         return sequence {
             var emitted = 0
-            for (candidate in startIp..endIp) {
-                if (emitted >= maxHosts) {
-                    break
-                }
-                val host = intToAddress(candidate)
-                if (host == ipAddress || exclude.contains(host)) {
+            val seen = mutableSetOf<Long>()
+            val localSegmentStart = maxOf(startIp, (ipLong and LOCAL_SEGMENT_MASK) + 1)
+            val localSegmentEnd = minOf(endIp, (ipLong or LOCAL_SEGMENT_HOST_MASK) - 1)
+            val ranges = listOf(
+                localSegmentStart to localSegmentEnd,
+                startIp to localSegmentStart - 1,
+                localSegmentEnd + 1 to endIp,
+            )
+
+            for ((rangeStart, rangeEnd) in ranges) {
+                if (rangeStart > rangeEnd) {
                     continue
                 }
-                yield(host)
-                emitted++
+                for (candidate in rangeStart..rangeEnd) {
+                    if (emitted >= maxHosts) {
+                        return@sequence
+                    }
+                    if (!seen.add(candidate)) {
+                        continue
+                    }
+                    val host = longToAddress(candidate)
+                    if (host == ipAddress || exclude.contains(host)) {
+                        continue
+                    }
+                    yield(host)
+                    emitted++
+                }
             }
         }
     }
 
-    private fun intToAddress(value: Int): String {
+    private fun longToAddress(value: Long): String {
         val bytes = byteArrayOf(
             (value shr 24 and 0xFF).toByte(),
             (value shr 16 and 0xFF).toByte(),
@@ -53,4 +70,8 @@ object CidrHostPlanner {
         )
         return InetAddress.getByAddress(bytes).hostAddress ?: ""
     }
+
+    private const val IPV4_MASK = 0xFFFFFFFFL
+    private const val LOCAL_SEGMENT_MASK = 0xFFFFFF00L
+    private const val LOCAL_SEGMENT_HOST_MASK = 0xFFL
 }

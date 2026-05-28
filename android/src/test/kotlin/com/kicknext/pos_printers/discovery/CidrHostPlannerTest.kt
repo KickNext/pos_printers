@@ -3,6 +3,7 @@ package com.kicknext.pos_printers.discovery
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CidrHostPlannerTest {
     @Test
@@ -31,5 +32,21 @@ class CidrHostPlannerTest {
         ).toList()
 
         assertEquals(32, hosts.size)
+    }
+
+    @Test
+    fun `host planner scans local segment before applying large network cap`() {
+        val hosts = CidrHostPlanner.hosts(
+            ipAddress = "192.168.100.40",
+            prefixLength = 16,
+            exclude = emptySet(),
+            maxHosts = 32,
+        ).toList()
+
+        assertEquals(32, hosts.size)
+        assertEquals("192.168.100.1", hosts.first())
+        assertTrue("192.168.100.32" in hosts)
+        assertFalse("192.168.0.1" in hosts)
+        assertFalse("192.168.100.40" in hosts)
     }
 }
