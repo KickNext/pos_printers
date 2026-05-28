@@ -30,33 +30,19 @@ object CidrHostPlanner {
 
         return sequence {
             var emitted = 0
-            val seen = mutableSetOf<Long>()
             val localSegmentStart = maxOf(startIp, (ipLong and LOCAL_SEGMENT_MASK) + 1)
             val localSegmentEnd = minOf(endIp, (ipLong or LOCAL_SEGMENT_HOST_MASK) - 1)
-            val ranges = listOf(
-                localSegmentStart to localSegmentEnd,
-                startIp to localSegmentStart - 1,
-                localSegmentEnd + 1 to endIp,
-            )
 
-            for ((rangeStart, rangeEnd) in ranges) {
-                if (rangeStart > rangeEnd) {
+            for (candidate in localSegmentStart..localSegmentEnd) {
+                if (emitted >= maxHosts) {
+                    break
+                }
+                val host = longToAddress(candidate)
+                if (host == ipAddress || exclude.contains(host)) {
                     continue
                 }
-                for (candidate in rangeStart..rangeEnd) {
-                    if (emitted >= maxHosts) {
-                        return@sequence
-                    }
-                    if (!seen.add(candidate)) {
-                        continue
-                    }
-                    val host = longToAddress(candidate)
-                    if (host == ipAddress || exclude.contains(host)) {
-                        continue
-                    }
-                    yield(host)
-                    emitted++
-                }
+                yield(host)
+                emitted++
             }
         }
     }
