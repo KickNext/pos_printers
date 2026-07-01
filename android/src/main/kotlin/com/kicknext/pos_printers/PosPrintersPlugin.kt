@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import net.posprinter.POSConnect
+import java.io.ByteArrayOutputStream
 
 /** 
  * Refactored PosPrintersPlugin with improved architecture and error handling.
@@ -279,29 +280,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     ) {
         try {
             ParameterValidator.validatePrinterConnection(printer)
-            ParameterValidator.validateHtmlContent(html, width)
-
-            // Возвращаем прежний стабильный быстрый путь рендеринга HTML,
-            // чтобы избежать таймаутов Html2Bitmap из дополнительной логики ожидания.
-            val content = WebViewContent.html(html)
-            val bitmap = Html2Bitmap.Builder()
-                .setBitmapWidth(width.toInt())
-                .setContent(content)
-                .setTextZoom(100)
-                .setContext(applicationContext)
-                .build()
-                .bitmap
-
-            if (bitmap == null) {
-                callback(Result.failure(Exception("Failed to generate bitmap from HTML")))
-                return
-            }
-
-            val bitmapForPrint = if (upsideDown) {
-                rotateBitmap180(bitmap)
-            } else {
-                bitmap
-            }
+            val bitmapForPrint = renderHtmlBitmapOrThrow(html, width, upsideDown)
 
             connectionManager.executeWithPrintCompletion(printer, { connection ->
                 val escPrinter = net.posprinter.POSPrinter(connection)
@@ -313,6 +292,47 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         } catch (e: Exception) {
             Log.e(TAG, "Print HTML validation failed", e)
             callback(Result.failure(Exception("Print HTML validation failed: ${e.message}")))
+        }
+    }
+
+    override fun renderHtmlBitmap(
+        html: String,
+        width: Long,
+        upsideDown: Boolean,
+        callback: (Result<ByteArray>) -> Unit
+    ) {
+        try {
+            val bitmap = renderHtmlBitmapOrThrow(html, width, upsideDown)
+            val stream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            callback(Result.success(stream.toByteArray()))
+        } catch (e: Exception) {
+            Log.e(TAG, "HTML bitmap rendering failed", e)
+            callback(Result.failure(Exception("HTML bitmap rendering failed: ${e.message}")))
+        }
+    }
+
+    private fun renderHtmlBitmapOrThrow(
+        html: String,
+        width: Long,
+        upsideDown: Boolean,
+    ): Bitmap {
+        ParameterValidator.validateHtmlContent(html, width)
+
+        // Keep this path identical to the proven ESC/POS HTML renderer.
+        val content = WebViewContent.html(html)
+        val bitmap = Html2Bitmap.Builder()
+            .setBitmapWidth(width.toInt())
+            .setContent(content)
+            .setTextZoom(100)
+            .setContext(applicationContext)
+            .build()
+            .bitmap ?: throw Exception("Failed to generate bitmap from HTML")
+
+        return if (upsideDown) {
+            rotateBitmap180(bitmap)
+        } else {
+            bitmap
         }
     }
 

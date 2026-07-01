@@ -11,6 +11,11 @@ abstract class PosPrintersNativeClient {
   Future<StatusResult> getPrinterStatus(PrinterConnectionParamsDTO printer);
   Future<StringResult> getPrinterSN(PrinterConnectionParamsDTO printer);
   Future<void> openCashBox(PrinterConnectionParamsDTO printer);
+  Future<Uint8List> renderHtmlBitmap(
+    String html,
+    int width,
+    bool upsideDown,
+  );
   Future<void> printHTML(
     PrinterConnectionParamsDTO printer,
     String html,
@@ -104,6 +109,15 @@ class PigeonPosPrintersNativeClient implements PosPrintersNativeClient {
   @override
   Future<void> openCashBox(PrinterConnectionParamsDTO printer) {
     return _api.openCashBox(printer);
+  }
+
+  @override
+  Future<Uint8List> renderHtmlBitmap(
+    String html,
+    int width,
+    bool upsideDown,
+  ) {
+    return _api.renderHtmlBitmap(html, width, upsideDown);
   }
 
   @override

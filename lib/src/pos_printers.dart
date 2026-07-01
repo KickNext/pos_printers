@@ -219,6 +219,16 @@ class PosPrintersManager implements PrinterEventListener {
     return _api.openCashBox(printer);
   }
 
+  /// Renders HTML into a PNG bitmap using the same Android html2bitmap path
+  /// as ESC/POS HTML printing, without opening a printer connection.
+  Future<Uint8List> renderHtmlBitmap(
+    String html,
+    int width, {
+    bool upsideDown = false,
+  }) {
+    return _api.renderHtmlBitmap(html, width, upsideDown);
+  }
+
   /// Prints HTML content on a standard ESC/POS receipt printer.
   ///
   /// [printer]: Connection parameters of the target printer.

@@ -435,6 +435,7 @@ interface POSPrintersApi {
   fun getPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<StatusResult>) -> Unit)
   fun getPrinterSN(printer: PrinterConnectionParamsDTO, callback: (Result<StringResult>) -> Unit)
   fun openCashBox(printer: PrinterConnectionParamsDTO, callback: (Result<Unit>) -> Unit)
+  fun renderHtmlBitmap(html: String, width: Long, upsideDown: Boolean, callback: (Result<ByteArray>) -> Unit)
   fun printHTML(printer: PrinterConnectionParamsDTO, html: String, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
   fun printData(printer: PrinterConnectionParamsDTO, data: ByteArray, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
   fun setNetSettingsToPrinter(printer: PrinterConnectionParamsDTO, netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
@@ -607,6 +608,29 @@ interface POSPrintersApi {
                 reply.reply(wrapError(error))
               } else {
                 reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.renderHtmlBitmap$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val htmlArg = args[0] as String
+            val widthArg = args[1] as Long
+            val upsideDownArg = args[2] as Boolean
+            api.renderHtmlBitmap(htmlArg, widthArg, upsideDownArg) { result: Result<ByteArray> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
               }
             }
           }

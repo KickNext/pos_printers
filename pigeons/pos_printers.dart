@@ -172,6 +172,10 @@ abstract class POSPrintersApi {
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  Uint8List renderHtmlBitmap(String html, int width, bool upsideDown);
+
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void printHTML(
     PrinterConnectionParamsDTO printer,
     String html,

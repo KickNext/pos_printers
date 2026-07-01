@@ -6,6 +6,8 @@ import 'package:pos_printers/pos_printers.dart';
 class FakeNativeClient implements PosPrintersNativeClient {
   NetworkParams? udpConfig;
   int? escWidth;
+  int? renderWidth;
+  bool? renderUpsideDown;
   TsplLabelMediaDTO? tsplMedia;
 
   @override
@@ -31,6 +33,17 @@ class FakeNativeClient implements PosPrintersNativeClient {
   @override
   Future<void> openCashBox(PrinterConnectionParamsDTO printer) {
     throw UnimplementedError();
+  }
+
+  @override
+  Future<Uint8List> renderHtmlBitmap(
+    String html,
+    int width,
+    bool upsideDown,
+  ) async {
+    renderWidth = width;
+    renderUpsideDown = upsideDown;
+    return Uint8List.fromList(<int>[1, 2, 3]);
   }
 
   @override
@@ -181,6 +194,24 @@ void main() {
     );
 
     expect(nativeClient.escWidth, 576);
+
+    manager.dispose();
+  });
+
+  test('HTML bitmap helper returns rendered bytes without printer connection',
+      () async {
+    final nativeClient = FakeNativeClient();
+    final manager = PosPrintersManager(nativeClient: nativeClient);
+
+    final bitmap = await manager.renderHtmlBitmap(
+      '<html><body>Receipt</body></html>',
+      576,
+      upsideDown: true,
+    );
+
+    expect(bitmap, Uint8List.fromList(<int>[1, 2, 3]));
+    expect(nativeClient.renderWidth, 576);
+    expect(nativeClient.renderUpsideDown, isTrue);
 
     manager.dispose();
   });
