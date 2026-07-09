@@ -70,6 +70,14 @@ class _PosPrintersDemoScreenState extends State<PosPrintersDemoScreen>
   final TextEditingController _tsplRawController = TextEditingController(
     text: _defaultTsplRaw,
   );
+  final TextEditingController _tsplWidthMmController =
+      TextEditingController(text: '58');
+  final TextEditingController _tsplHeightMmController =
+      TextEditingController(text: '60');
+  final TextEditingController _tsplGapMmController =
+      TextEditingController(text: '2');
+  final TextEditingController _tsplDpiController =
+      TextEditingController(text: '203');
 
   final TextEditingController _udpIpController =
       TextEditingController(text: '192.168.2.217');
@@ -89,7 +97,7 @@ class _PosPrintersDemoScreenState extends State<PosPrintersDemoScreen>
       TextEditingController(text: '192.168.2.1');
   bool _setDhcp = true;
 
-  int _escWidth = 576;
+  int _escWidth = ReceiptPaper.mm80.printableWidthDots.value;
   final int _labelWidth = 203;
 
   static const String _defaultEscHtml = '''
@@ -165,6 +173,10 @@ PRINT 1
     _zplRawController.dispose();
     _tsplHtmlController.dispose();
     _tsplRawController.dispose();
+    _tsplWidthMmController.dispose();
+    _tsplHeightMmController.dispose();
+    _tsplGapMmController.dispose();
+    _tsplDpiController.dispose();
 
     _udpIpController.dispose();
     _udpMaskController.dispose();
@@ -284,10 +296,10 @@ PRINT 1
   Future<void> _printEscHtml() async {
     await _runWithSelection('ESC HTML print', (printer) async {
       await _manager.withUsbPermission(printer, () {
-        return _manager.printEscHTML(
+        return _manager.printEscHtmlOnPaper(
           printer,
           _escHtmlController.text,
-          _escWidth,
+          _receiptPaper,
           upsideDown: _upsideDown,
         );
       });
@@ -298,10 +310,10 @@ PRINT 1
     await _runWithSelection('ESC RAW print', (printer) async {
       final bytes = _convertEscPseudoRaw(_escRawController.text);
       await _manager.withUsbPermission(printer, () {
-        return _manager.printEscRawData(
+        return _manager.printEscRawDataOnPaper(
           printer,
           bytes,
-          _escWidth,
+          _receiptPaper,
           upsideDown: _upsideDown,
         );
       });
@@ -330,10 +342,10 @@ PRINT 1
 
   Future<void> _printTsplHtml() async {
     await _runWithSelection('TSPL HTML print', (printer) async {
-      await _manager.printTsplHtml(
+      await _manager.printTsplHtmlOnMedia(
         printer,
         _tsplHtmlController.text,
-        _labelWidth,
+        _tsplMedia,
       );
     });
   }
@@ -343,9 +355,31 @@ PRINT 1
       await _manager.printTsplRawData(
         printer,
         Uint8List.fromList(utf8.encode(_tsplRawController.text)),
-        _labelWidth,
+        _tsplMedia.bitmapWidthDots,
       );
     });
+  }
+
+  ReceiptPaper get _receiptPaper {
+    if (_escWidth == ReceiptPaper.mm58.printableWidthDots.value) {
+      return ReceiptPaper.mm58;
+    }
+    return ReceiptPaper.mm80;
+  }
+
+  TsplLabelMedia get _tsplMedia {
+    return TsplLabelMedia(
+      width: Millimeters(
+        double.tryParse(_tsplWidthMmController.text.trim()) ?? 58,
+      ),
+      height: Millimeters(
+        double.tryParse(_tsplHeightMmController.text.trim()) ?? 60,
+      ),
+      gap: Millimeters(
+        double.tryParse(_tsplGapMmController.text.trim()) ?? 2,
+      ),
+      dpi: Dpi(int.tryParse(_tsplDpiController.text.trim()) ?? 203),
+    );
   }
 
   Future<void> _openCashDrawer() async {
@@ -779,7 +813,7 @@ PRINT 1
                   value: _escWidth,
                   items: const <DropdownMenuItem<int>>[
                     DropdownMenuItem(
-                        value: 384, child: Text('58mm (384 dots)')),
+                        value: 416, child: Text('58mm (416 dots)')),
                     DropdownMenuItem(
                         value: 576, child: Text('80mm (576 dots)')),
                   ],
@@ -813,6 +847,44 @@ PRINT 1
           onHtmlPrint: _printZplHtml,
           onRawPrint: _printZplRaw,
           rawHint: 'Raw ZPL commands, e.g. ^XA ... ^XZ',
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('TSPL media',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child:
+                          _buildTextField(_tsplWidthMmController, 'Width mm'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child:
+                          _buildTextField(_tsplHeightMmController, 'Height mm'),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _buildTextField(_tsplGapMmController, 'Gap mm'),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildTextField(_tsplDpiController, 'DPI'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 8),
         _buildLanguageCard(

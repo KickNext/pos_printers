@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.izettle.html2bitmap.Html2Bitmap
 import com.izettle.html2bitmap.content.WebViewContent
+import com.kicknext.pos_printers.domain.PrinterStatusMapper
+import com.kicknext.pos_printers.domain.TsplLabelLayout
 import com.kicknext.pos_printers.gen.*
 import kotlinx.coroutines.*
 import net.posprinter.*
@@ -285,56 +287,89 @@ class PrinterOperations(private val context: Context) {
         upsideDown: Boolean = false
     ) = withContext(Dispatchers.IO) {
         validateTsplPrinterReady(connection)
-        
-        // Generate bitmap from HTML with proper synchronization
-        val bitmap = suspendCoroutine<Bitmap> { continuation ->
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                try {
-                    val content = WebViewContent.html(html)
-                    val bitmapResult = Html2Bitmap.Builder()
-                        .setBitmapWidth(width.toInt())
-                        .setContent(content)
-                        .setTextZoom(100)
-                        .setStrictMode(true)
-                        .setContext(context)
-                        .build()
-                        .bitmap
-                    
-                    if (bitmapResult != null) {
-                        Log.d(TAG, "TSPL HTML to Bitmap conversion successful, size: ${bitmapResult.width}x${bitmapResult.height}")
-                        continuation.resume(bitmapResult)
-                    } else {
-                        continuation.resumeWith(kotlin.Result.failure(IllegalStateException("Generated bitmap is null")))
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "TSPL HTML to Bitmap conversion failed", e)
-                    continuation.resumeWith(kotlin.Result.failure(e))
+
+        val bitmap = renderHtmlBitmap(html, width.toInt(), "TSPL")
+        val layout = TsplLabelLayout.legacyFromBitmap(width.toInt(), bitmap.height)
+        printTsplBitmap(connection, bitmap, layout, upsideDown)
+        Log.d(TAG, "TSPL HTML printed successfully")
+    }
+
+    /**
+     * Prints HTML as TSPL label with explicit physical media.
+     */
+    suspend fun printTsplHtmlWithLayout(
+        connection: IDeviceConnection,
+        html: String,
+        layout: TsplLabelLayout,
+        upsideDown: Boolean = false
+    ) = withContext(Dispatchers.IO) {
+        validateTsplPrinterReady(connection)
+
+        val bitmap = renderHtmlBitmap(html, layout.bitmapWidthDots, "TSPL")
+        printTsplBitmap(connection, bitmap, layout, upsideDown)
+        Log.d(TAG, "TSPL HTML printed successfully with media layout=$layout")
+    }
+
+    private suspend fun renderHtmlBitmap(
+        html: String,
+        bitmapWidthDots: Int,
+        logPrefix: String
+    ): Bitmap = suspendCoroutine { continuation ->
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                val content = WebViewContent.html(html)
+                val bitmapResult = Html2Bitmap.Builder()
+                    .setBitmapWidth(bitmapWidthDots)
+                    .setContent(content)
+                    .setTextZoom(100)
+                    .setStrictMode(true)
+                    .setContext(context)
+                    .build()
+                    .bitmap
+
+                if (bitmapResult != null) {
+                    Log.d(TAG, "$logPrefix HTML to Bitmap conversion successful, size: ${bitmapResult.width}x${bitmapResult.height}")
+                    continuation.resume(bitmapResult)
+                } else {
+                    continuation.resumeWith(kotlin.Result.failure(IllegalStateException("Generated bitmap is null")))
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "$logPrefix HTML to Bitmap conversion failed", e)
+                continuation.resumeWith(kotlin.Result.failure(e))
             }
         }
-        
+    }
+
+    private fun printTsplBitmap(
+        connection: IDeviceConnection,
+        bitmap: Bitmap,
+        layout: TsplLabelLayout,
+        upsideDown: Boolean
+    ) {
         val tsplPrinter = TSPLPrinter(connection)
         if (upsideDown) {
             try {
                 applyTsplUpsideDown(tsplPrinter, true)
-                tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
-                tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
-                tsplPrinter.cls()
-                tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, width.toInt(), bitmap, AlgorithmType.Dithering)
-                tsplPrinter.print(1)
+                sendTsplBitmap(tsplPrinter, bitmap, layout)
             } finally {
                 applyTsplUpsideDown(tsplPrinter, false)
             }
         } else {
             // Не отправляем команды смены ориентации, чтобы не добавлять служебные байты.
-            tsplPrinter.sizeMm(width.toInt().toDouble(), (bitmap.height / (width.toInt() / 58)).toDouble()) // Approximate height based on 58mm width
-            tsplPrinter.gapMm(2.0, 0.0) // Default gap settings
-            tsplPrinter.cls()
-            tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, width.toInt(), bitmap, AlgorithmType.Dithering)
-            tsplPrinter.print(1)
+            sendTsplBitmap(tsplPrinter, bitmap, layout)
         }
-        
-        Log.d(TAG, "TSPL HTML printed successfully")
+    }
+
+    private fun sendTsplBitmap(
+        tsplPrinter: TSPLPrinter,
+        bitmap: Bitmap,
+        layout: TsplLabelLayout
+    ) {
+        tsplPrinter.sizeMm(layout.widthMm, layout.heightMm)
+        tsplPrinter.gapMm(layout.gapMm, 0.0)
+        tsplPrinter.cls()
+        tsplPrinter.bitmap(0, 0, TSPLConst.BMP_MODE_OVERWRITE, layout.bitmapWidthDots, bitmap, AlgorithmType.Dithering)
+        tsplPrinter.print(1)
     }
     
     /**
@@ -354,13 +389,12 @@ class PrinterOperations(private val context: Context) {
             }
         }
         
-        val statusText = mapStatusCodeToString(status)
-        val isSuccess = status >= POSConst.STS_NORMAL
+        val mappedStatus = PrinterStatusMapper.fromEscPos(status)
         
         StatusResult(
-            success = isSuccess,
-            status = statusText,
-            errorMessage = if (isSuccess) null else statusText
+            success = mappedStatus.success,
+            status = mappedStatus.errorMessage ?: "Normal status",
+            errorMessage = mappedStatus.errorMessage
         )
     }
     
@@ -408,13 +442,12 @@ class PrinterOperations(private val context: Context) {
             }
         }
         
-        val isSuccess = statusCode == 0x00
-        val errorMessage = if (isSuccess) null else mapTsplStatusCodeToString(statusCode)
+        val mappedStatus = PrinterStatusMapper.fromTspl(statusCode)
         
         TSPLStatusResult(
-            success = isSuccess,
+            success = mappedStatus.success,
             code = statusCode.toLong(),
-            errorMessage = errorMessage
+            errorMessage = mappedStatus.errorMessage
         )
     }
     
