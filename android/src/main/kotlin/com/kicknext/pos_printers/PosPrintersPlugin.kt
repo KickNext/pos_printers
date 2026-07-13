@@ -21,6 +21,7 @@ import com.kicknext.pos_printers.network.UdpNetworkManager
 import com.kicknext.pos_printers.validation.ParameterValidator
 import com.kicknext.pos_printers.permission.UsbPermissionManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -306,6 +307,31 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         } catch (e: Exception) {
             Log.e(TAG, "Print HTML validation failed", e)
             callback(Result.failure(Exception("Print HTML validation failed: ${e.message}")))
+        }
+    }
+
+    override fun renderHtmlBitmap(
+        html: String,
+        width: Long,
+        upsideDown: Boolean,
+        callback: (Result<ByteArray>) -> Unit
+    ) {
+        try {
+            ParameterValidator.validateHtmlContent(html, width)
+            val bitmap = Html2Bitmap.Builder()
+                .setBitmapWidth(width.toInt())
+                .setContent(WebViewContent.html(html))
+                .setTextZoom(100)
+                .setContext(applicationContext)
+                .build()
+                .bitmap ?: throw Exception("Failed to generate bitmap from HTML")
+            val bitmapForResult = if (upsideDown) rotateBitmap180(bitmap) else bitmap
+            val stream = ByteArrayOutputStream()
+            bitmapForResult.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            callback(Result.success(stream.toByteArray()))
+        } catch (e: Exception) {
+            Log.e(TAG, "HTML bitmap rendering failed", e)
+            callback(Result.failure(Exception("HTML bitmap rendering failed: ${e.message}")))
         }
     }
 

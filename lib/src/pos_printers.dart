@@ -212,6 +212,15 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     return _api.openCashBox(printer);
   }
 
+  /// Renders HTML into a PNG bitmap without opening a printer connection.
+  Future<Uint8List> renderHtmlBitmap(
+    String html,
+    int width, {
+    bool upsideDown = false,
+  }) {
+    return _api.renderHtmlBitmap(html, width, upsideDown);
+  }
+
   /// Prints HTML content on a standard ESC/POS receipt printer.
   ///
   /// [printer]: Connection parameters of the target printer.
