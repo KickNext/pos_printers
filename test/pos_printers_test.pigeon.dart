@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pos_printers/src/pos_printers.pigeon.dart';
 
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -17,35 +18,32 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is PosPrinterConnectionType) {
+    }    else if (value is PosPrinterConnectionType) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is PrinterConnectionParamsDTO) {
+    }    else if (value is PrinterConnectionParamsDTO) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    } else if (value is UsbParams) {
+    }    else if (value is UsbParams) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is NetworkParams) {
+    }    else if (value is NetworkParams) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is ZPLStatusResult) {
+    }    else if (value is ZPLStatusResult) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is TSPLStatusResult) {
+    }    else if (value is TSPLStatusResult) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is StatusResult) {
+    }    else if (value is StatusResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is StringResult) {
+    }    else if (value is StringResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is UsbPermissionResult) {
+    }    else if (value is UsbPermissionResult) {
       buffer.putUint8(137);
-      writeValue(buffer, value.encode());
-    } else if (value is TsplLabelMediaDTO) {
-      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -55,27 +53,25 @@ class _PigeonCodec extends StandardMessageCodec {
   @override
   Object? readValueOfType(int type, ReadBuffer buffer) {
     switch (type) {
-      case 129:
+      case 129: 
         final int? value = readValue(buffer) as int?;
         return value == null ? null : PosPrinterConnectionType.values[value];
-      case 130:
+      case 130: 
         return PrinterConnectionParamsDTO.decode(readValue(buffer)!);
-      case 131:
+      case 131: 
         return UsbParams.decode(readValue(buffer)!);
-      case 132:
+      case 132: 
         return NetworkParams.decode(readValue(buffer)!);
-      case 133:
+      case 133: 
         return ZPLStatusResult.decode(readValue(buffer)!);
-      case 134:
+      case 134: 
         return TSPLStatusResult.decode(readValue(buffer)!);
-      case 135:
+      case 135: 
         return StatusResult.decode(readValue(buffer)!);
-      case 136:
+      case 136: 
         return StringResult.decode(readValue(buffer)!);
-      case 137:
+      case 137: 
         return UsbPermissionResult.decode(readValue(buffer)!);
-      case 138:
-        return TsplLabelMediaDTO.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }

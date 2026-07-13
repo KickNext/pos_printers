@@ -1,14 +1,29 @@
-# POS Printers
+# POS Printers Plugin
 
-Flutter plugin for Android receipt and label printers. It supports ESC/POS, ZPL, and TSPL printing over USB and network connections, with USB permission handling, discovery events, status checks, and network configuration helpers.
+A comprehensive Flutter plugin for POS (Point of Sale) and label printers, supporting ESC/POS receipt printers, ZPL label printers, and TSPL label printers with USB and network connectivity.
 
-## Install
+## Features
+
+- **Multiple Printer Types**: Support for ESC/POS receipt printers, ZPL label printers, and TSPL label printers
+- **Multiple Connection Types**: USB, network (TCP), and SDK-based discovery
+- **HTML Printing**: Convert HTML to printable bitmaps for receipt and label printers
+- **Raw Data Printing**: Send raw ESC/POS, ZPL, CPCL, and TSPL commands
+- **Printer Discovery**: Automatic discovery of USB and network printers
+- **Connection Management**: Robust connection handling with retry logic and proper cleanup
+- **Paper Sizes**: Support for 58mm (416 dots) and 80mm (576 dots) paper widths
+- **Network Configuration**: Configure printer network settings via USB or UDP
+- **Real-time Events**: Monitor printer attach/detach events and discovery status
+- **Stress Testing**: Built-in support for concurrent printing operations
+
+## Installation
+
+Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
   pos_printers:
     git:
-      url: https://github.com/KickNext/pos_printers.git
+      url: https://github.com/your-repo/pos_printers.git
 ```
 
 ## Quick Start
@@ -16,185 +31,527 @@ dependencies:
 ```dart
 import 'package:pos_printers/pos_printers.dart';
 
+// Create manager instance
 final manager = PosPrintersManager();
 
-final stream = manager.findPrinters(
-  filter: PrinterDiscoveryFilter(
-    connectionTypes: const [
-      DiscoveryConnectionType.usb,
-      DiscoveryConnectionType.sdk,
-      DiscoveryConnectionType.tcp,
-    ],
-  ),
-);
+// Discover printers
+final printerStream = manager.findPrinters(filter: null);
+printerStream.listen((printer) {
+  print('Found printer: ${printer.id}');
+});
 
-await for (final printer in stream) {
-  await manager.withUsbPermission(printer, () {
-    return manager.printEscHtmlOnPaper(
-      printer,
-      '<html><body><b>Total: 12.34</b></body></html>',
-      ReceiptPaper.mm80,
-    );
-  });
-}
+// Print HTML receipt on 80mm paper
+await manager.printEscHTML(
+  printer,
+  '<html><body><h1>Receipt</h1><p>Total: $10.50</p></body></html>',
+  PaperSize.mm80.value,
+  upsideDown: true,
+);
 ```
 
-## Public API Shape
+## API Reference
 
-`PosPrintersManager` is the public entry point. Pigeon-generated DTOs remain exported for compatibility with existing apps, but new code should keep business choices in explicit domain types where available:
+### Core Classes
 
-- `ReceiptPaper.mm58` and `ReceiptPaper.mm80` express receipt printable width in dots.
-- `TsplLabelMedia` expresses physical TSPL label size in millimeters plus DPI.
-- `PrinterDiscoveryFilter` filters by connection type: USB, SDK network discovery, and bounded TCP scan.
-- `PrinterEventRouter` fans native events out to every active `PosPrintersManager` instance.
-- `PosPrintersNativeClient` can be injected in tests instead of mocking Flutter channels.
+#### PosPrintersManager
 
-## Discovery
+Main class for managing printer operations.
 
 ```dart
-final printers = manager.findPrinters(
-  filter: PrinterDiscoveryFilter(
-    connectionTypes: const [DiscoveryConnectionType.usb],
+final manager = PosPrintersManager();
+```
+
+**Methods:**
+
+- `Stream<PrinterConnectionParamsDTO> findPrinters({PrinterDiscoveryFilter? filter})`
+- `Future<void> awaitDiscoveryComplete()`
+- `Future<StatusResult> getPrinterStatus(PrinterConnectionParamsDTO printer)`
+- `Future<StringResult> getPrinterSN(PrinterConnectionParamsDTO printer)`
+- `Future<void> openCashBox(PrinterConnectionParamsDTO printer)`
+- `Future<void> printEscHTML(PrinterConnectionParamsDTO printer, String html, int width, {bool upsideDown = false})`
+- `Future<void> printEscRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width, {bool upsideDown = false})`
+- `Future<void> printZplHtml(PrinterConnectionParamsDTO printer, String html, int width)`
+- `Future<void> printZplRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width)`
+- `Future<ZPLStatusResult> getZPLPrinterStatus(PrinterConnectionParamsDTO printer)`
+- `Future<void> printTsplHtml(PrinterConnectionParamsDTO printer, String html, int width)`
+- `Future<void> printTsplRawData(PrinterConnectionParamsDTO printer, Uint8List data, int width)`
+- `Future<TSPLStatusResult> getTSPLPrinterStatus(PrinterConnectionParamsDTO printer)`
+- `Future<void> setNetSettings(PrinterConnectionParamsDTO printer, NetworkParams netSettings)`
+- `Future<void> configureNetViaUDP(String macAddress, NetworkParams netSettings)`
+- `void dispose()`
+
+**Streams:**
+
+- `Stream<PrinterConnectionParamsDTO> discoveryStream` - Discovered printers during scanning
+- `Stream<PrinterConnectionEvent> connectionEvents` - Printer attach/detach events
+
+#### PrinterConnectionParamsDTO
+
+Represents printer connection parameters.
+
+```dart
+final printer = PrinterConnectionParamsDTO(
+  id: 'printer_001',
+  connectionType: PosPrinterConnectionType.network,
+  usbParams: null,
+  networkParams: NetworkParams(
+    ipAddress: '192.168.1.100',
+    mask: '255.255.255.0',
+    gateway: '192.168.1.1',
+    macAddress: 'AA:BB:CC:DD:EE:FF',
+    dhcp: false,
   ),
 );
+```
 
-await for (final printer in printers) {
-  print('Found ${printer.id}');
-}
+**Properties:**
 
+- `String id` - Unique printer identifier
+- `PosPrinterConnectionType connectionType` - Connection type (usb, network)
+- `UsbParams? usbParams` - USB connection parameters (if USB)
+- `NetworkParams? networkParams` - Network connection parameters (if network)
+
+#### NetworkParams
+
+Network connection parameters.
+
+```dart
+final networkParams = NetworkParams(
+  ipAddress: '192.168.1.100',
+  mask: '255.255.255.0',
+  gateway: '192.168.1.1',
+  macAddress: 'AA:BB:CC:DD:EE:FF',
+  dhcp: false,
+);
+```
+
+#### UsbParams
+
+USB connection parameters.
+
+```dart
+final usbParams = UsbParams(
+  vendorId: 0x0416,
+  productId: 0x5011,
+  serialNumber: 'ABC123',
+  manufacturer: 'Xprinter',
+  productName: 'XP-80C',
+);
+```
+
+### Printer Discovery
+
+#### Basic Discovery
+
+```dart
+// Discover all available printers
+final printerStream = manager.findPrinters(filter: null);
+
+printerStream.listen(
+  (printer) => print('Found: ${printer.id}'),
+  onDone: () => print('Discovery complete'),
+  onError: (error) => print('Discovery error: $error'),
+);
+
+// Wait for discovery to complete
 await manager.awaitDiscoveryComplete();
 ```
 
-TCP discovery scans candidate hosts for port `9100` by default and is capped on Android to avoid accidentally scanning very large networks.
-
-## Receipt Printing
+#### Filtered Discovery
 
 ```dart
-await manager.withUsbPermission(printer, () {
-  return manager.printEscHtmlOnPaper(
-    printer,
-    '<html><body>Receipt</body></html>',
-    ReceiptPaper.mm58,
-  );
-});
+// Discover only USB printers
+final filter = PrinterDiscoveryFilter(
+  connectionTypes: [DiscoveryConnectionType.usb],
+);
 
-await manager.printEscRawDataOnPaper(
+final printerStream = manager.findPrinters(filter: filter);
+```
+
+#### Discovery Connection Types
+
+- `DiscoveryConnectionType.usb` - USB connected printers
+- `DiscoveryConnectionType.sdk` - Network printers via Xprinter SDK
+- `DiscoveryConnectionType.tcp` - Network printers via TCP (port 9100)
+
+#### Real-time Events
+
+```dart
+// Monitor printer connections
+manager.connectionEvents.listen((event) {
+  switch (event.type) {
+    case PrinterConnectionEventType.attached:
+      print('Printer attached: ${event.printer?.id}');
+      break;
+    case PrinterConnectionEventType.detached:
+      print('Printer detached: ${event.printer?.id}');
+      break;
+  }
+});
+```
+
+### Printing Operations
+
+#### HTML Printing
+
+Print HTML content converted to bitmap.
+
+**ESC/POS Receipt Printers:**
+
+```dart
+final html = '''
+<html>
+<body style="font-family: monospace; text-align: center;">
+  <h2>STORE RECEIPT</h2>
+  <hr>
+  <table width="100%">
+    <tr><td>Coffee</td><td align="right">$3.50</td></tr>
+    <tr><td>Sandwich</td><td align="right">$7.00</td></tr>
+  </table>
+  <hr>
+  <p><b>Total: $10.50</b></p>
+  <p>Thank you!</p>
+</body>
+</html>
+''';
+
+await manager.printEscHTML(printer, html, PaperSize.mm80.value, upsideDown: true);
+```
+
+**ZPL Label Printers:**
+
+```dart
+final html = '''
+<html>
+<body style="font-family: Arial; padding: 10px;">
+  <div style="border: 2px solid black; padding: 20px;">
+    <h1>SHIPPING LABEL</h1>
+    <p>To: John Doe</p>
+    <p>123 Main Street</p>
+    <p>City, State 12345</p>
+    <div style="margin-top: 20px; font-size: 24px;">
+      <b>Tracking: ABC123456789</b>
+    </div>
+  </div>
+</body>
+</html>
+''';
+
+await manager.printZplHtml(printer, html, PaperSize.mm80.value);
+```
+
+#### Raw Data Printing
+
+Send raw printer commands directly.
+
+**ESC/POS Commands:**
+
+```dart
+final escCommands = [
+  0x1B, 0x40, // Initialize
+  0x1B, 0x61, 0x01, // Center align
+  ...utf8.encode('Hello World'),
+  0x0A, // Line feed
+  0x1D, 0x56, 0x42, 0x00, // Cut paper
+];
+
+await manager.printEscRawData(
   printer,
-  escPosBytes,
-  ReceiptPaper.mm80,
+  Uint8List.fromList(escCommands),
+  PaperSize.mm80.value
 );
 ```
 
-The legacy `printEscHTML` and `printEscRawData` methods are still available when the caller already has a bitmap width in dots.
-
-## Label Printing
-
-ZPL methods accept raw ZPL commands or HTML rendered as a bitmap:
+**ZPL Commands:**
 
 ```dart
+final zplCommands = '''
+^XA
+^CFD,30
+^FO50,50^FDHello World^FS
+^XZ
+''';
+
 await manager.printZplRawData(
   printer,
-  Uint8List.fromList(utf8.encode('^XA^FO50,50^FDHello^FS^XZ')),
-  576,
+  Uint8List.fromList(utf8.encode(zplCommands)),
+  PaperSize.mm80.value,
 );
 ```
 
-For TSPL HTML printing, prefer explicit media geometry:
+**TSPL Commands:**
 
 ```dart
-const media = TsplLabelMedia(
-  width: Millimeters(58),
-  height: Millimeters(60),
-  gap: Millimeters(2),
-  dpi: Dpi(203),
-);
+final tsplCommands = '''
+SIZE 60 mm, 40 mm
+GAP 2 mm, 0 mm
+DIRECTION 0
+CLS
+TEXT 50,50,"3",0,1,1,"Hello World"
+PRINT 1
+''';
 
-await manager.printTsplHtmlOnMedia(
+await manager.printTsplRawData(
   printer,
-  '<html><body><h3>Product Label</h3></body></html>',
-  media,
+  Uint8List.fromList(utf8.encode(tsplCommands)),
+  PaperSize.mm58.value,
 );
 ```
 
-For raw TSPL, the command stream remains authoritative. Include the exact `SIZE`, `GAP` or `BLINE`, and `PRINT` commands in your payload.
+**TSPL HTML Printing:**
 
-## Status
+```dart
+final html = '''
+<html>
+  <head>
+    <style>
+      body { font-family: Arial; padding: 10px; }
+      h1 { font-size: 24px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <h1>Product Label</h1>
+    <p>SKU: 12345</p>
+    <p>Price: $19.99</p>
+  </body>
+</html>
+''';
+
+await manager.printTsplHtml(printer, html, PaperSize.mm58.value);
+```
+
+### Paper Sizes
+
+Predefined paper sizes with dot widths:
+
+```dart
+enum PaperSize {
+  mm58(416),  // 58mm paper = 416 dots
+  mm80(576);  // 80mm paper = 576 dots
+}
+
+// Usage
+await manager.printEscHTML(printer, html, PaperSize.mm58.value);
+await manager.printEscHTML(printer, html, PaperSize.mm80.value);
+```
+
+### Printer Status and Information
+
+#### Get Printer Status
 
 ```dart
 final status = await manager.getPrinterStatus(printer);
-if (!status.success) {
-  print(status.errorMessage);
+if (status.success) {
+  print('Printer status: ${status.status}');
+} else {
+  print('Error: ${status.errorMessage}');
 }
-
-final tspl = await manager.getTSPLPrinterStatus(printer);
 ```
 
-ESC/POS and TSPL status values are normalized on Android so paper-out, cover-open, timeouts, and similar states are not reported as successful print-ready states.
-
-## Network Configuration
-
-USB/network configuration:
+#### Get Serial Number
 
 ```dart
-await manager.setNetSettings(
-  usbPrinter,
-  NetworkParams(
-    ipAddress: '192.168.1.50',
-    mask: '255.255.255.0',
-    gateway: '192.168.1.1',
-    macAddress: null,
-    dhcp: false,
-  ),
-);
+final snResult = await manager.getPrinterSN(printer);
+if (snResult.success) {
+  print('Serial Number: ${snResult.value}');
+} else {
+  print('Error: ${snResult.errorMessage}');
+}
 ```
 
-UDP broadcast configuration requires a target MAC address. It may be passed either as the first argument or inside `NetworkParams.macAddress`.
+#### ZPL Printer Status
 
 ```dart
-await manager.configureNetViaUDP(
-  'AA:BB:CC:DD:EE:FF',
-  NetworkParams(
-    ipAddress: '192.168.1.51',
-    mask: '255.255.255.0',
-    gateway: '192.168.1.1',
-    macAddress: null,
-    dhcp: false,
-  ),
-);
+final zplStatus = await manager.getZPLPrinterStatus(printer);
+if (zplStatus.success) {
+  print('ZPL Status Code: ${zplStatus.code}');
+  // Status codes: 00-80 (see ZPL documentation)
+} else {
+  print('Error: ${zplStatus.errorMessage}');
+}
 ```
+
+#### TSPL Printer Status
+
+```dart
+final tsplStatus = await manager.getTSPLPrinterStatus(printer);
+if (tsplStatus.success) {
+  print('TSPL Status Code: ${tsplStatus.code}');
+  // Status codes:
+  // 0x00 - Normal
+  // 0x01 - Head opened
+  // 0x04 - Out of paper
+  // 0x08 - Out of ribbon
+  // See TSPL documentation for complete list
+} else {
+  print('Error: ${tsplStatus.errorMessage}');
+}
+```
+
+### Network Configuration
+
+#### Configure via USB Connection
+
+```dart
+final newSettings = NetworkParams(
+  ipAddress: '192.168.1.200',
+  mask: '255.255.255.0',
+  gateway: '192.168.1.1',
+  macAddress: null, // Will be detected
+  dhcp: false,
+);
+
+await manager.setNetSettings(usbPrinter, newSettings);
+```
+
+#### Configure via UDP Broadcast
+
+```dart
+final settings = NetworkParams(
+  ipAddress: '192.168.1.201',
+  mask: '255.255.255.0',
+  gateway: '192.168.1.1',
+  macAddress: 'AA:BB:CC:DD:EE:FF',
+  dhcp: false,
+);
+
+await manager.configureNetViaUDP('AA:BB:CC:DD:EE:FF', settings);
+```
+
+### Cash Drawer Control
+
+```dart
+// Open cash drawer connected to printer
+await manager.openCashBox(printer);
+```
+
+### Error Handling
+
+All async methods can throw exceptions. Wrap in try-catch blocks:
+
+```dart
+try {
+  await manager.printEscHTML(printer, html, PaperSize.mm80.value);
+  print('Print successful');
+} catch (e) {
+  print('Print failed: $e');
+}
+```
+
+### Advanced Usage
+
+#### Stress Testing / Concurrent Printing
+
+```dart
+Future<void> stressTest() async {
+  final printers = <PrinterConnectionParamsDTO>[printer1, printer2];
+  final futures = <Future<void>>[];
+
+  // Send 10 print jobs simultaneously
+  for (int i = 0; i < 10; i++) {
+    final html = '<html><body><h1>Receipt #$i</h1></body></html>';
+    futures.add(manager.printEscHTML(
+      printers[i % printers.length],
+      html,
+      PaperSize.mm80.value,
+    ));
+  }
+
+  // Wait for all to complete
+  await Future.wait(futures);
+  print('All prints completed');
+}
+```
+
+#### Custom Connection Handling
+
+```dart
+class PrinterService {
+  final PosPrintersManager _manager;
+  final Map<String, PrinterConnectionParamsDTO> _connectedPrinters = {};
+
+  PrinterService() : _manager = PosPrintersManager() {
+    _setupEventListeners();
+  }
+
+  void _setupEventListeners() {
+    _manager.connectionEvents.listen((event) {
+      switch (event.type) {
+        case PrinterConnectionEventType.attached:
+          _connectedPrinters[event.printer!.id] = event.printer!;
+          break;
+        case PrinterConnectionEventType.detached:
+          _connectedPrinters.remove(event.printer!.id);
+          break;
+      }
+    });
+  }
+
+  Future<void> printToAll(String html) async {
+    final futures = _connectedPrinters.values.map((printer) =>
+        _manager.printEscHTML(printer, html, PaperSize.mm80.value));
+    await Future.wait(futures);
+  }
+}
+```
+
+### Complete Example
+
+See the `example/` directory for a full working application that demonstrates:
+
+- Printer discovery with real-time updates
+- HTML and raw data printing
+- Stress testing with concurrent operations
+- Error handling and retry logic
+- Network printer configuration
+- Multi-language support (ESC/POS and ZPL)
+
+### Enums Reference
+
+#### PosPrinterConnectionType
+
+- `usb` - USB connection
+- `network` - Network TCP/IP connection
+
+#### PrinterLanguage
+
+- `esc` - ESC/POS commands (receipt printers)
+- `zpl` - ZPL commands (label printers)
+
+#### DiscoveryConnectionType
+
+- `usb` - Discover USB printers
+- `sdk` - Discover via Xprinter SDK
+- `tcp` - Discover via TCP scan (port 9100)
+
+#### PrinterConnectionEventType
+
+- `attached` - Printer was connected
+- `detached` - Printer was disconnected
 
 ## Architecture
 
-The package is organized as a domain-first Dart facade over an internal Pigeon transport:
+The plugin uses a modular architecture with:
 
-- Dart public API: `lib/src/pos_printers.dart`, `domain.dart`, `native_client.dart`, `event_router.dart`.
-- Pigeon wire contract: `pigeons/pos_printers.dart` and generated files.
-- Android runtime: plugin adapter, discovery, connection manager, printer operations, network manager, and small domain mappers.
+- **Pigeon-generated bindings** for type-safe Flutter-Android communication
+- **Connection pooling** with automatic retry and cleanup
+- **Thread-safe operations** using Kotlin coroutines
+- **Event-driven discovery** with real-time printer detection
+- **Robust error handling** with detailed error messages
 
-See [doc/ARCHITECTURE.md](doc/ARCHITECTURE.md) for the review notes and layer boundaries.
+## Platform Support
 
-## Development
+- **Android**: Full support for USB and network printers
+- **iOS**: Not supported (Android-only plugin)
 
-Regenerate Pigeon after editing `pigeons/pos_printers.dart`:
+## Building
+
+To regenerate the Pigeon bindings after modifying `pigeons/pos_printers.dart`:
 
 ```shell
 dart run pigeon --input pigeons/pos_printers.dart
 ```
 
-Useful verification commands:
-
-```shell
-flutter analyze
-flutter test
-cd example/android && ./gradlew :pos_printers:testDebugUnitTest
-cd ../.. && cd example && flutter build apk --debug
-dart pub publish --dry-run
-```
-
-## Platform Support
-
-Android only. iOS is not implemented.
-
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This project is licensed under the MIT License - see the LICENSE file for details.

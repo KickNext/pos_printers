@@ -1,25 +1,3 @@
-## 0.7.2+2026032701
-
-### Architecture
-
-- Added domain-first Dart helpers for receipt paper and TSPL media.
-- Added injectable native client seam for Dart tests.
-- Added a shared event router so multiple manager instances can receive native printer events.
-- Kept Pigeon as the internal transport layer while preserving existing generated DTO compatibility.
-
-### Android
-
-- Added pure Kotlin domain mappers for ESC/POS and TSPL status normalization.
-- Added explicit TSPL label layout handling for physical media in millimeters.
-- Added UDP network configuration parsing with explicit target MAC handling.
-- Bounded TCP discovery host planning to avoid uncontrolled large-network scans.
-- Scoped plugin coroutines to the Flutter plugin lifecycle.
-
-### Documentation
-
-- Rewrote README, architecture notes, TSPL usage, and the example README around the new API shape.
-- Fixed stale TSPL language-discovery documentation and clarified dots vs millimeters.
-
 ## 0.6.0
 
 ### 🚀 New Features

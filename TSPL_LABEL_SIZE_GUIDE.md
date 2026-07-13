@@ -282,26 +282,29 @@ if (status.success) {
 
 ## Обновлённый Пример в Приложении
 
-В `example/lib/main.dart` размер TSPL-этикетки задаётся явно через `TsplLabelMedia`: физические размеры идут в миллиметрах, а ширина bitmap рассчитывается в dots.
+В `example/lib/main.dart` теперь используется **58x60mm** вместо неправильного 60x40mm:
 
 ```dart
-const media = TsplLabelMedia(
-  width: Millimeters(58),
-  height: Millimeters(60),
-  gap: Millimeters(2),
-  dpi: Dpi(203),
-);
+Future<void> _printTsplSimpleText() async {
+  // Измените размер под ВАШУ этикетку!
+  const tsplCommands = '''
+SIZE 58 mm, 60 mm    // ← Укажите реальный размер
+GAP 2 mm, 0 mm       // ← Укажите реальный зазор
+DIRECTION 0
+CLS
+TEXT 50,50,"3",0,1,1,"Hello TSPL!"
+TEXT 50,100,"3",0,1,1,"Test Print"
+TEXT 50,150,"2",0,1,1,"Size: 58x60mm"
+PRINT 1
+''';
 
-await manager.printTsplHtmlOnMedia(printer, html, media);
-
-await manager.printTsplRawData(
-  printer,
-  Uint8List.fromList(tsplCommands.codeUnits),
-  media.bitmapWidthDots,
-);
+  await _printersManager.printTsplRawData(
+    _selectedPrinter!,
+    Uint8List.fromList(tsplCommands.codeUnits),
+    203, // 203 DPI
+  );
+}
 ```
-
-Важно: `media.bitmapWidthDots` - это ширина bitmap в dots, а не DPI. DPI участвует только в пересчёте миллиметров в dots.
 
 ---
 

@@ -12,8 +12,7 @@ import java.net.NetworkInterface
 
 class TcpPrinterDiscovery(
     private val excludeIpSet: Set<String> = emptySet(),
-    private val maxConcurrency: Int = 100,
-    private val maxHostsPerNetwork: Int = 254,
+    private val maxConcurrency: Int = 100
 ) {
 
     fun discover(
@@ -27,13 +26,10 @@ class TcpPrinterDiscovery(
             val semaphore = Semaphore(maxConcurrency)
             val jobs = mutableListOf<Job>()
             for (network in localNetworks) {
-                val range = CidrHostPlanner.hosts(
-                    ipAddress = network.ipAddress,
-                    prefixLength = network.prefixLength,
-                    exclude = excludeIpSet,
-                    maxHosts = maxHostsPerNetwork,
-                )
+                val range = Utils.getIpRangeFromCidr(network.ipAddress, network.prefixLength) ?: continue
                 for (ip in range) {
+                    if (ip == network.ipAddress || excludeIpSet.contains(ip)) continue
+
                     val job = launch(Dispatchers.IO) {
                         semaphore.acquire()
                         try {

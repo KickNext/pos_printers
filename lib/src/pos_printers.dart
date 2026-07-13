@@ -1,12 +1,7 @@
 import 'dart:developer' as developer;
 import 'dart:async';
 import 'package:flutter/services.dart'; // Required for PlatformException
-
-import 'domain.dart';
-import 'event_router.dart';
-import 'filter.dart';
-import 'native_client.dart';
-import 'pos_printers.pigeon.dart';
+import 'package:pos_printers/pos_printers.dart';
 
 /// Типы событий подключения/отключения принтера
 enum PrinterConnectionEventType { attached, detached }
@@ -71,10 +66,10 @@ class UsbPermissionDeniedException implements Exception {
 ///   await manager.printEscHTML(printer, '<h1>Test</h1>', 384);
 /// });
 /// ```
-class PosPrintersManager implements PrinterEventListener {
+class PosPrintersManager implements PrinterDiscoveryEventsApi {
   static const String _logTag = 'PosPrintersManager';
 
-  final PosPrintersNativeClient _api;
+  final POSPrintersApi _api = POSPrintersApi();
 
   /// Stream controller for emitting discovered printers during a scan.
   /// Use broadcast to allow multiple listeners if needed, though typically one is enough.
@@ -94,11 +89,9 @@ class PosPrintersManager implements PrinterEventListener {
       _connectionEventsController.stream;
 
   /// Initializes the manager and sets up the receiver for native callbacks.
-  PosPrintersManager({PosPrintersNativeClient? nativeClient})
-      : _api = nativeClient ?? PigeonPosPrintersNativeClient() {
-    PrinterEventRouter.instance
-      ..ensureSetUp()
-      ..addListener(this);
+  PosPrintersManager() {
+    // Set up the handler for native calls to the FlutterApi
+    PrinterDiscoveryEventsApi.setUp(this);
   }
 
   /// Disposes resources. Call this when the manager is no longer needed.
@@ -107,7 +100,7 @@ class PosPrintersManager implements PrinterEventListener {
     _discoveryCompleter?.completeError(StateError(
         "Manager disposed during discovery")); // Signal error if ongoing
     _connectionEventsController.close();
-    PrinterEventRouter.instance.removeListener(this);
+    PrinterDiscoveryEventsApi.setUp(null); // Detach the receiver
   }
 
   @override
@@ -219,16 +212,6 @@ class PosPrintersManager implements PrinterEventListener {
     return _api.openCashBox(printer);
   }
 
-  /// Renders HTML into a PNG bitmap using the same Android html2bitmap path
-  /// as ESC/POS HTML printing, without opening a printer connection.
-  Future<Uint8List> renderHtmlBitmap(
-    String html,
-    int width, {
-    bool upsideDown = false,
-  }) {
-    return _api.renderHtmlBitmap(html, width, upsideDown);
-  }
-
   /// Prints HTML content on a standard ESC/POS receipt printer.
   ///
   /// [printer]: Connection parameters of the target printer.
@@ -244,21 +227,6 @@ class PosPrintersManager implements PrinterEventListener {
     return _api.printHTML(printer, html, width, upsideDown);
   }
 
-  /// Prints HTML on a receipt printer using an explicit paper preset.
-  Future<void> printEscHtmlOnPaper(
-    PrinterConnectionParamsDTO printer,
-    String html,
-    ReceiptPaper paper, {
-    bool upsideDown = false,
-  }) {
-    return printEscHTML(
-      printer,
-      html,
-      paper.printableWidthDots.value,
-      upsideDown: upsideDown,
-    );
-  }
-
   /// Sends raw ESC/POS commands к чековому принтеру.
   Future<void> printEscRawData(
     PrinterConnectionParamsDTO printer,
@@ -267,21 +235,6 @@ class PosPrintersManager implements PrinterEventListener {
     bool upsideDown = false,
   }) async {
     return _api.printData(printer, data, width, upsideDown);
-  }
-
-  /// Sends raw ESC/POS bytes using an explicit paper preset.
-  Future<void> printEscRawDataOnPaper(
-    PrinterConnectionParamsDTO printer,
-    Uint8List data,
-    ReceiptPaper paper, {
-    bool upsideDown = false,
-  }) {
-    return printEscRawData(
-      printer,
-      data,
-      paper.printableWidthDots.value,
-      upsideDown: upsideDown,
-    );
   }
 
   /// Configures network settings for a printer (usually via USB connection initially).
@@ -299,19 +252,7 @@ class PosPrintersManager implements PrinterEventListener {
   /// [netSettings]: The network settings to apply.
   Future<void> configureNetViaUDP(
       String macAddress, NetworkParams netSettings) async {
-    final targetMacAddress = macAddress.trim().isNotEmpty
-        ? macAddress.trim()
-        : netSettings.macAddress;
-    if (targetMacAddress == null || targetMacAddress.isEmpty) {
-      throw ArgumentError('MAC address is required for UDP configuration');
-    }
-    return _api.configureNetViaUDP(NetworkParams(
-      ipAddress: netSettings.ipAddress,
-      mask: netSettings.mask,
-      gateway: netSettings.gateway,
-      macAddress: targetMacAddress,
-      dhcp: netSettings.dhcp,
-    ));
+    return _api.configureNetViaUDP(netSettings);
   }
 
   // --- Label Printer Specific Methods ---
@@ -356,25 +297,6 @@ class PosPrintersManager implements PrinterEventListener {
     int width,
   ) async {
     return _api.printTsplHtml(printer, html, width);
-  }
-
-  /// Prints HTML as a TSPL label with explicit physical media geometry.
-  Future<void> printTsplHtmlOnMedia(
-    PrinterConnectionParamsDTO printer,
-    String html,
-    TsplLabelMedia media,
-  ) {
-    return _api.printTsplHtmlWithMedia(
-      printer,
-      html,
-      TsplLabelMediaDTO(
-        widthMm: media.width.value.toDouble(),
-        heightMm: media.height.value.toDouble(),
-        gapMm: media.gap.value.toDouble(),
-        dpi: media.dpi.value,
-        bitmapWidthDots: media.bitmapWidthDots,
-      ),
-    );
   }
 
   /// Получить статус TSPL-принтера
