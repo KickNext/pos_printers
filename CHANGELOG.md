@@ -1,3 +1,13 @@
+## 0.8.0
+
+### Changes
+
+- Xprinter Android SDK updated from 3.3.83 to 3.5.8 (`android/libs`: manifest, `classes.jar`, native libraries for all four ABIs).
+- `NetworkParams.modelName` (optional, last field): model name reported by the printer in the UDP search; null when the printer does not report one.
+- `findNetworkPrinterByIp(ipAddress, {timeout})`: UDP search by IPv4, returns the printer's MAC, mask, gateway, DHCP flag and model name, or null if nobody answered within the timeout (3 s by default). Useful for printers found by TCP scan, which have no MAC.
+- SDK (UDP) discovery is now bounded to 3 s (`searchNetDeviceWithTimeout`); the finish event is sent after the search window closes, so all answers reach the stream first. IPv6 answers are skipped.
+- SDK 3.5.8 removed `IPOSListener`, `IDeviceConnection.connect/connectSync(String, IPOSListener)`, `IDeviceConnection.isConnect(byte[], cb)` and `POSConnect.connectMac`. The plugin does not use any of them, so printing and connection behavior is unchanged.
+
 ## 0.6.0
 
 ### 🚀 New Features

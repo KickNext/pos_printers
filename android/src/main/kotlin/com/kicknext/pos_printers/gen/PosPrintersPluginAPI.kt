@@ -123,7 +123,8 @@ data class NetworkParams (
   val mask: String? = null,
   val gateway: String? = null,
   val macAddress: String? = null,
-  val dhcp: Boolean? = null
+  val dhcp: Boolean? = null,
+  val modelName: String? = null
 )
  {
   companion object {
@@ -133,7 +134,8 @@ data class NetworkParams (
       val gateway = pigeonVar_list[2] as String?
       val macAddress = pigeonVar_list[3] as String?
       val dhcp = pigeonVar_list[4] as Boolean?
-      return NetworkParams(ipAddress, mask, gateway, macAddress, dhcp)
+      val modelName = pigeonVar_list[5] as String?
+      return NetworkParams(ipAddress, mask, gateway, macAddress, dhcp, modelName)
     }
   }
   fun toList(): List<Any?> {
@@ -143,6 +145,7 @@ data class NetworkParams (
       gateway,
       macAddress,
       dhcp,
+      modelName,
     )
   }
 }
@@ -401,6 +404,11 @@ interface POSPrintersApi {
   fun printData(printer: PrinterConnectionParamsDTO, data: ByteArray, width: Long, upsideDown: Boolean, callback: (Result<Unit>) -> Unit)
   fun setNetSettingsToPrinter(printer: PrinterConnectionParamsDTO, netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
   fun configureNetViaUDP(netSettings: NetworkParams, callback: (Result<Unit>) -> Unit)
+  /**
+   * UDP-поиск по SDK: возвращает сетевые параметры принтера с IPv4
+   * [ipAddress] или null, если за [timeoutMs] никто не ответил.
+   */
+  fun findNetworkPrinterByIp(ipAddress: String, timeoutMs: Long, callback: (Result<NetworkParams?>) -> Unit)
   fun printZplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
   fun printZplHtml(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
   fun getZPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<ZPLStatusResult>) -> Unit)
@@ -678,6 +686,28 @@ interface POSPrintersApi {
                 reply.reply(wrapError(error))
               } else {
                 reply.reply(wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.findNetworkPrinterByIp$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val ipAddressArg = args[0] as String
+            val timeoutMsArg = args[1] as Long
+            api.findNetworkPrinterByIp(ipAddressArg, timeoutMsArg) { result: Result<NetworkParams?> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
               }
             }
           }

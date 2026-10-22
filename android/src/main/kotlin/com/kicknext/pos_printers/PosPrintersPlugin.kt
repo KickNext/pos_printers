@@ -17,6 +17,7 @@ import com.kicknext.pos_printers.discovery.SdkPrinterDiscovery
 import com.kicknext.pos_printers.discovery.TcpPrinterDiscovery
 import com.kicknext.pos_printers.connection.PrinterConnectionManager
 import com.kicknext.pos_printers.printer.PrinterOperations
+import com.kicknext.pos_printers.network.NetworkPrinterLookup
 import com.kicknext.pos_printers.network.UdpNetworkManager
 import com.kicknext.pos_printers.validation.ParameterValidator
 import com.kicknext.pos_printers.permission.UsbPermissionManager
@@ -50,6 +51,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     private lateinit var connectionManager: PrinterConnectionManager
     private lateinit var printerOperations: PrinterOperations
     private lateinit var udpNetworkManager: UdpNetworkManager
+    private val networkPrinterLookup = NetworkPrinterLookup()
     private lateinit var usbPermissionManager: UsbPermissionManager
     
     private val pluginScope = CoroutineScope(Dispatchers.IO)
@@ -235,6 +237,22 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
             } catch (e: Exception) {
                 Log.e(TAG, "UDP network configuration failed", e)
                 callback(Result.failure(Exception("Configure net via UDP failed: ${e.message}")))
+            }
+        }
+    }
+
+    override fun findNetworkPrinterByIp(
+        ipAddress: String,
+        timeoutMs: Long,
+        callback: (Result<NetworkParams?>) -> Unit
+    ) {
+        pluginScope.launch {
+            try {
+                val result = networkPrinterLookup.findByIp(ipAddress, timeoutMs.toInt())
+                callback(Result.success(result))
+            } catch (e: Exception) {
+                Log.e(TAG, "Find network printer by IP failed", e)
+                callback(Result.failure(Exception("Find network printer by IP failed: ${e.message}")))
             }
         }
     }

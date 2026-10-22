@@ -115,6 +115,7 @@ class NetworkParams {
     this.gateway,
     this.macAddress,
     this.dhcp,
+    this.modelName,
   });
 
   String ipAddress;
@@ -127,6 +128,8 @@ class NetworkParams {
 
   bool? dhcp;
 
+  String? modelName;
+
   Object encode() {
     return <Object?>[
       ipAddress,
@@ -134,6 +137,7 @@ class NetworkParams {
       gateway,
       macAddress,
       dhcp,
+      modelName,
     ];
   }
 
@@ -145,6 +149,7 @@ class NetworkParams {
       gateway: result[2] as String?,
       macAddress: result[3] as String?,
       dhcp: result[4] as bool?,
+      modelName: result[5] as String?,
     );
   }
 }
@@ -737,6 +742,33 @@ class POSPrintersApi {
       );
     } else {
       return;
+    }
+  }
+
+  /// UDP-поиск по SDK: возвращает сетевые параметры принтера с IPv4
+  /// [ipAddress] или null, если за [timeoutMs] никто не ответил.
+  Future<NetworkParams?> findNetworkPrinterByIp(
+      String ipAddress, int timeoutMs) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.findNetworkPrinterByIp$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[ipAddress, timeoutMs]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return (pigeonVar_replyList[0] as NetworkParams?);
     }
   }
 

@@ -399,6 +399,7 @@ PRINT 1
           ? null
           : _udpMacController.text.trim(),
       dhcp: _udpDhcp,
+      modelName: null,
     );
 
     try {
@@ -406,6 +407,21 @@ PRINT 1
       _log('UDP network configuration command sent');
     } catch (error) {
       _log('UDP network configuration failed: $error');
+    }
+  }
+
+  Future<void> _lookupByIp() async {
+    final ip = _udpIpController.text.trim();
+    try {
+      final found = await _manager.findNetworkPrinterByIp(ip);
+      if (found == null) {
+        _log('Lookup by IP $ip: no answer');
+      } else {
+        _log('Lookup by IP $ip: model=${found.modelName}, mac=${found.macAddress}, '
+            'mask=${found.mask}, gateway=${found.gateway}, dhcp=${found.dhcp}');
+      }
+    } catch (error) {
+      _log('Lookup by IP failed: $error');
     }
   }
 
@@ -417,6 +433,7 @@ PRINT 1
         gateway: _setGatewayController.text.trim(),
         macAddress: null,
         dhcp: _setDhcp,
+        modelName: null,
       );
       await _manager.setNetSettings(printer, settings);
     });
@@ -633,7 +650,8 @@ PRINT 1
                       title: Text(printer.id),
                       subtitle: Text(isUsb
                           ? 'USB: VID=${printer.usbParams?.vendorId} PID=${printer.usbParams?.productId}'
-                          : 'Network: ${printer.networkParams?.ipAddress ?? '-'}'),
+                          : 'Network: ${printer.networkParams?.ipAddress ?? '-'}'
+                              '${(printer.networkParams?.modelName ?? '').isEmpty ? '' : ' (${printer.networkParams?.modelName})'}'),
                       trailing: selected
                           ? const Icon(Icons.check_circle, color: Colors.green)
                           : null,
@@ -861,6 +879,12 @@ PRINT 1
                   onPressed: _configureUdp,
                   icon: const Icon(Icons.settings_ethernet),
                   label: const Text('Configure via UDP'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _lookupByIp,
+                  icon: const Icon(Icons.search),
+                  label: const Text('Lookup by IP'),
                 ),
               ],
             ),
