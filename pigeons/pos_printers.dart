@@ -52,6 +52,7 @@ class NetworkParams {
   final String? gateway;
   final String? macAddress;
   final bool? dhcp;
+  final String? modelName;
 
   NetworkParams({
     required this.ipAddress,
@@ -59,6 +60,7 @@ class NetworkParams {
     required this.gateway,
     required this.macAddress,
     required this.dhcp,
+    required this.modelName,
   });
 }
 
@@ -184,6 +186,12 @@ abstract class POSPrintersApi {
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   void configureNetViaUDP(NetworkParams netSettings);
+
+  /// UDP-поиск по SDK: возвращает сетевые параметры принтера с IPv4
+  /// [ipAddress] или null, если за [timeoutMs] никто не ответил.
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  NetworkParams? findNetworkPrinterByIp(String ipAddress, int timeoutMs);
 
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread) // Reverted

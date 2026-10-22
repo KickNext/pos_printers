@@ -38,7 +38,7 @@ class TcpPrinterDiscovery(
                                     id = ip,
                                     connectionType = PosPrinterConnectionType.NETWORK,
                                     usbParams = null,
-                                    networkParams = NetworkParams(ipAddress = ip)
+                                    networkParams = NetworkParams(ipAddress = ip, modelName = null)
                                 )
                                 Utils.runOnMainThread {
                                     onPrinterFound(printerParams)
