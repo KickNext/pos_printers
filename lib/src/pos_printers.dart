@@ -264,6 +264,19 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     return _api.configureNetViaUDP(netSettings);
   }
 
+  /// Finds a network printer by its IPv4 address using the Xprinter SDK UDP search.
+  ///
+  /// Use it when a printer was found by TCP scan (no MAC, mask, gateway or DHCP
+  /// flag) and you need those values for [configureNetViaUDP].
+  /// Returns the printer's [NetworkParams] (including `modelName` when the
+  /// printer reports it), or `null` if nobody with this IP answered within [timeout].
+  Future<NetworkParams?> findNetworkPrinterByIp(
+    String ipAddress, {
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    return _api.findNetworkPrinterByIp(ipAddress, timeout.inMilliseconds);
+  }
+
   // --- Label Printer Specific Methods ---
 
   /// Sends raw commands (CPCL, TSPL, или ZPL) к принтеру.

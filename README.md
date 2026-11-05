@@ -5,7 +5,7 @@ A comprehensive Flutter plugin for POS (Point of Sale) and label printers, suppo
 ## Features
 
 - **Multiple Printer Types**: Support for ESC/POS receipt printers, ZPL label printers, and TSPL label printers
-- **Multiple Connection Types**: USB, network (TCP), and SDK-based discovery
+- **Multiple Connection Types**: USB, network (TCP), and SDK-based discovery (Xprinter Android SDK 3.5.8)
 - **HTML Printing**: Convert HTML to printable bitmaps for receipt and label printers
 - **Raw Data Printing**: Send raw ESC/POS, ZPL, CPCL, and TSPL commands
 - **Printer Discovery**: Automatic discovery of USB and network printers
@@ -78,6 +78,7 @@ final manager = PosPrintersManager();
 - `Future<TSPLStatusResult> getTSPLPrinterStatus(PrinterConnectionParamsDTO printer)`
 - `Future<void> setNetSettings(PrinterConnectionParamsDTO printer, NetworkParams netSettings)`
 - `Future<void> configureNetViaUDP(String macAddress, NetworkParams netSettings)`
+- `Future<NetworkParams?> findNetworkPrinterByIp(String ipAddress, {Duration timeout})`
 - `void dispose()`
 
 **Streams:**
@@ -416,6 +417,18 @@ final settings = NetworkParams(
 );
 
 await manager.configureNetViaUDP('AA:BB:CC:DD:EE:FF', settings);
+```
+
+#### Look Up a Printer by IP
+
+For a printer found by TCP scan (no MAC), ask the SDK for its current network
+parameters; returns `null` if nobody with this IP answers within the timeout.
+
+```dart
+final found = await manager.findNetworkPrinterByIp('192.168.1.200');
+if (found != null) {
+  print('${found.modelName} ${found.macAddress} ${found.mask} ${found.gateway} dhcp=${found.dhcp}');
+}
 ```
 
 ### Cash Drawer Control

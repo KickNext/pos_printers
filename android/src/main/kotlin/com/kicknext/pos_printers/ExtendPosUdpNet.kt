@@ -12,6 +12,11 @@ class ExtendPosUdpNet : PosUdpNet() {
         super.searchNetDevice(callback)
     }
 
+    override fun searchNetDeviceWithTimeout(callback: UdpCallback?, timeoutMs: Int) {
+        isSearch = true
+        super.searchNetDeviceWithTimeout(callback, timeoutMs)
+    }
+
     override fun closeNetSocket() {
         println("closeNetSocket called")
         super.closeNetSocket()
