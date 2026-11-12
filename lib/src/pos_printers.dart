@@ -134,8 +134,11 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     ));
   }
 
+  /// Finds printers. With [limitTcpScanTo24] (strict mode) the TCP scan covers
+  /// at most a /24 around each local address instead of the whole subnet.
   Stream<PrinterConnectionParamsDTO> findPrinters({
     required PrinterDiscoveryFilter? filter,
+    bool limitTcpScanTo24 = false,
   }) {
     if (_printerDiscoveryController != null &&
         !_printerDiscoveryController!.isClosed) {
@@ -146,7 +149,8 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
         StreamController<PrinterConnectionParamsDTO>.broadcast();
     _discoveryCompleter = Completer<void>();
     try {
-      unawaited(_startDiscoverPrinters(filter: filter));
+      unawaited(_startDiscoverPrinters(
+          filter: filter, limitTcpScanTo24: limitTcpScanTo24));
       return _printerDiscoveryController!.stream;
     } catch (e) {
       _printerDiscoveryController?.addError(e);
@@ -160,6 +164,7 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
 
   Future<void> _startDiscoverPrinters({
     required PrinterDiscoveryFilter? filter,
+    bool limitTcpScanTo24 = false,
   }) async {
     try {
       final types = filter?.connectionTypes;
@@ -172,7 +177,11 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
         await _api.startDiscoveryXprinterSDKNetworkPrinters();
       }
       if (discoverAll || types.contains(DiscoveryConnectionType.tcp)) {
-        await _api.startDiscoveryTCPNetworkPrinters(9100);
+        if (limitTcpScanTo24) {
+          await _api.startDiscoveryTCPNetworkPrintersStrict(9100);
+        } else {
+          await _api.startDiscoveryTCPNetworkPrinters(9100);
+        }
       }
 
       _finishDiscovery();
@@ -244,6 +253,73 @@ class PosPrintersManager implements PrinterDiscoveryEventsApi {
     bool upsideDown = false,
   }) async {
     return _api.printData(printer, data, width, upsideDown);
+  }
+
+  // ==================== Strict mode (opt-in) ====================
+
+  /// ESC/POS status with the real SDK code and a mapped [PrinterOutcome].
+  ///
+  /// Unlike [getPrinterStatus] this never reports success for a cover-open or
+  /// paper-empty printer, and the read has a time limit.
+  Future<PrinterStatusDTO> getPrinterStatusStrict(
+    PrinterConnectionParamsDTO printer, {
+    PrintOptions options = const PrintOptions.strict(),
+  }) {
+    return _api.getPrinterStatusStrict(printer, options.toDto());
+  }
+
+  /// Prints HTML like [printEscHTML] and returns the outcome.
+  ///
+  /// With the default `PrintOptions()` this is the legacy path (throws on
+  /// failure, returns [PrintOutcomeResult.legacySuccess]). With
+  /// `PrintOptions.strict()` it does not throw for printer conditions.
+  Future<PrintOutcomeResult> printEscHTMLWithOutcome(
+    PrinterConnectionParamsDTO printer,
+    String html,
+    int width, {
+    bool upsideDown = false,
+    PrintOptions options = const PrintOptions(),
+  }) async {
+    if (!options.strict) {
+      await _api.printHTML(printer, html, width, upsideDown);
+      return const PrintOutcomeResult.legacySuccess();
+    }
+    return PrintOutcomeResult.fromDto(await _api.printHTMLStrict(
+        printer, html, width, upsideDown, options.toDto()));
+  }
+
+  /// Sends raw ESC/POS like [printEscRawData] and returns the outcome.
+  /// See [printEscHTMLWithOutcome] for the modes.
+  Future<PrintOutcomeResult> printEscRawDataWithOutcome(
+    PrinterConnectionParamsDTO printer,
+    Uint8List data,
+    int width, {
+    bool upsideDown = false,
+    PrintOptions options = const PrintOptions(),
+  }) async {
+    if (!options.strict) {
+      await _api.printData(printer, data, width, upsideDown);
+      return const PrintOutcomeResult.legacySuccess();
+    }
+    return PrintOutcomeResult.fromDto(await _api.printDataStrict(
+        printer, data, width, upsideDown, options.toDto()));
+  }
+
+  /// Opens the cash drawer like [openCashBox] and returns the outcome.
+  ///
+  /// Strict mode reports connection and write errors instead of swallowing
+  /// them. A ready outcome means the pulse was written; the drawer state is
+  /// not read.
+  Future<PrintOutcomeResult> openCashBoxWithOutcome(
+    PrinterConnectionParamsDTO printer, {
+    PrintOptions options = const PrintOptions(),
+  }) async {
+    if (!options.strict) {
+      await _api.openCashBox(printer);
+      return const PrintOutcomeResult.legacySuccess();
+    }
+    return PrintOutcomeResult.fromDto(
+        await _api.openCashBoxStrict(printer, options.toDto()));
   }
 
   /// Configures network settings for a printer (usually via USB connection initially).

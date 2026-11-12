@@ -17,6 +17,7 @@ import com.kicknext.pos_printers.discovery.SdkPrinterDiscovery
 import com.kicknext.pos_printers.discovery.TcpPrinterDiscovery
 import com.kicknext.pos_printers.connection.PrinterConnectionManager
 import com.kicknext.pos_printers.printer.PrinterOperations
+import com.kicknext.pos_printers.strict.StrictPrintExecutor
 import com.kicknext.pos_printers.network.NetworkPrinterLookup
 import com.kicknext.pos_printers.network.UdpNetworkManager
 import com.kicknext.pos_printers.validation.ParameterValidator
@@ -50,6 +51,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
     // Refactored components
     private lateinit var connectionManager: PrinterConnectionManager
     private lateinit var printerOperations: PrinterOperations
+    private lateinit var strictExecutor: StrictPrintExecutor
     private lateinit var udpNetworkManager: UdpNetworkManager
     private val networkPrinterLookup = NetworkPrinterLookup()
     private lateinit var usbPermissionManager: UsbPermissionManager
@@ -117,6 +119,7 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
         // Initialize refactored components
         connectionManager = PrinterConnectionManager(usbManager)
         printerOperations = PrinterOperations(applicationContext)
+        strictExecutor = StrictPrintExecutor(connectionManager, printerOperations)
         udpNetworkManager = UdpNetworkManager()
         usbPermissionManager = UsbPermissionManager(applicationContext, usbManager)
         
@@ -665,6 +668,138 @@ class PosPrintersPlugin : FlutterPlugin, POSPrintersApi {
                 Log.e(TAG, "TCP printer discovery failed", e)
                 callback(Result.failure(Exception("TCP printer discovery failed: ${e.message}")))
             }
+        }
+    }
+
+    // ==================== Strict mode (opt-in) ====================
+
+    override fun getPrinterStatusStrict(
+        printer: PrinterConnectionParamsDTO,
+        options: StrictPrintOptionsDTO,
+        callback: (Result<PrinterStatusDTO>) -> Unit
+    ) {
+        pluginScope.launch {
+            val status = try {
+                ParameterValidator.validatePrinterConnection(printer)
+                strictExecutor.readStatus(printer, options)
+            } catch (e: Exception) {
+                Log.e(TAG, "Strict status failed", e)
+                PrinterStatusDTO(PrinterOutcome.ERROR, null, "Status failed: ${e.message}", 0, 0)
+            }
+            callback(Result.success(status))
+        }
+    }
+
+    override fun printDataStrict(
+        printer: PrinterConnectionParamsDTO,
+        data: ByteArray,
+        width: Long,
+        upsideDown: Boolean,
+        options: StrictPrintOptionsDTO,
+        callback: (Result<PrintJobResultDTO>) -> Unit
+    ) {
+        pluginScope.launch {
+            val started = System.currentTimeMillis()
+            val result = try {
+                ParameterValidator.validatePrinterConnection(printer)
+                ParameterValidator.validatePrintData(data, width)
+                strictExecutor.printRaw(printer, data, width, upsideDown, options, started)
+            } catch (e: Exception) {
+                Log.e(TAG, "Strict print data failed", e)
+                strictExecutor.failedBeforeSend(PrinterOutcome.ERROR, PrintStage.VALIDATION, "Print data failed: ${e.message}", started)
+            }
+            callback(Result.success(result))
+        }
+    }
+
+    override fun printHTMLStrict(
+        printer: PrinterConnectionParamsDTO,
+        html: String,
+        width: Long,
+        upsideDown: Boolean,
+        options: StrictPrintOptionsDTO,
+        callback: (Result<PrintJobResultDTO>) -> Unit
+    ) {
+        pluginScope.launch {
+            val started = System.currentTimeMillis()
+            val result = try {
+                ParameterValidator.validatePrinterConnection(printer)
+                ParameterValidator.validateHtmlContent(html, width)
+                val bitmap = renderBitmapBounded(html, width, upsideDown, options.jobTimeoutMs)
+                if (bitmap == null) {
+                    strictExecutor.failedBeforeSend(PrinterOutcome.TIMEOUT, PrintStage.RENDER, "HTML rendering timed out or produced no bitmap", started)
+                } else {
+                    strictExecutor.printBitmap(printer, bitmap, width, options, started)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Strict print HTML failed", e)
+                strictExecutor.failedBeforeSend(PrinterOutcome.ERROR, PrintStage.RENDER, "Print HTML failed: ${e.message}", started)
+            }
+            callback(Result.success(result))
+        }
+    }
+
+    override fun openCashBoxStrict(
+        printer: PrinterConnectionParamsDTO,
+        options: StrictPrintOptionsDTO,
+        callback: (Result<PrintJobResultDTO>) -> Unit
+    ) {
+        pluginScope.launch {
+            val started = System.currentTimeMillis()
+            val result = try {
+                ParameterValidator.validatePrinterConnection(printer)
+                strictExecutor.openCashBox(printer, options)
+            } catch (e: Exception) {
+                Log.e(TAG, "Strict cash drawer failed", e)
+                strictExecutor.failedBeforeSend(PrinterOutcome.ERROR, PrintStage.VALIDATION, "Open cash box failed: ${e.message}", started)
+            }
+            callback(Result.success(result))
+        }
+    }
+
+    override fun startDiscoveryTCPNetworkPrintersStrict(port: Long, callback: (Result<Unit>) -> Unit) {
+        pluginScope.launch {
+            try {
+                ParameterValidator.validateTcpPort(port)
+                TcpPrinterDiscovery(limitTo24 = true).discover(
+                    onPrinterFound = { printer ->
+                        try {
+                            discoveryEventsApi.onPrinterFound(printer) {}
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Error notifying printer found: ${e.message}")
+                        }
+                    },
+                    onFinish = { callback(Result.success(Unit)) },
+                    port = port.toInt(),
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Strict TCP printer discovery failed", e)
+                callback(Result.failure(Exception("TCP printer discovery failed: ${e.message}")))
+            }
+        }
+    }
+
+    /**
+     * Renders HTML on a worker thread with a time limit. Html2Bitmap cannot be interrupted, so on a
+     * timeout the worker is abandoned (daemon thread) and null is returned.
+     */
+    private fun renderBitmapBounded(html: String, width: Long, upsideDown: Boolean, timeoutMs: Long): Bitmap? {
+        val task = java.util.concurrent.FutureTask<Bitmap?> {
+            val bitmap = Html2Bitmap.Builder()
+                .setBitmapWidth(width.toInt())
+                .setContent(WebViewContent.html(html))
+                .setTextZoom(100)
+                .setContext(applicationContext)
+                .build()
+                .bitmap
+            if (bitmap != null && upsideDown) rotateBitmap180(bitmap) else bitmap
+        }
+        Thread(task, "pos-printers-strict-render").apply { isDaemon = true; start() }
+        return try {
+            task.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: java.util.concurrent.TimeoutException) {
+            task.cancel(true)
+            null
         }
     }
 

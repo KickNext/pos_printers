@@ -119,6 +119,141 @@ class UsbPermissionResult {
   });
 }
 
+// ==================== Strict printing mode (opt-in) ====================
+//
+// Everything below is additive. The methods above keep their behaviour. The
+// `*Strict` methods return an honest outcome instead of throwing/guessing.
+
+/// Mapped outcome of a printer status read or of a strict print job.
+///
+/// For a job, [ready] means: the bytes were written to the printer and the
+/// status read afterwards shows no fault. It does NOT mean "paper came out":
+/// ESC/POS printers give no completion signal.
+enum PrinterOutcome {
+  /// Printer answers and reports no fault (paper near end is still ready).
+  ready,
+
+  /// Paper roll is empty.
+  noPaper,
+
+  /// Cover is open.
+  coverOpen,
+
+  /// Cannot connect, connection dropped, or the printer is paused/offline.
+  offline,
+
+  /// Connecting, rendering, the status read or the whole job ran out of time.
+  timeout,
+
+  /// Printer fault (cutter, overheat, generic error) or a write error.
+  error,
+
+  /// The printer did not give a usable status.
+  unknown,
+}
+
+/// Where a strict job stopped.
+enum PrintStage {
+  /// The job ran to the end (see the outcome for the final printer state).
+  completed,
+  validation,
+  render,
+  connect,
+  preStatus,
+  write,
+  postStatus,
+}
+
+/// Limits of a strict job. Defaults are chosen by the Dart wrapper.
+class StrictPrintOptionsDTO {
+  /// Connection attempts. Only connecting is retried, never a write.
+  final int connectAttempts;
+
+  /// Total time for all connection attempts, in milliseconds.
+  final int connectBudgetMs;
+
+  /// Hard limit for the whole job (render, connect, status, write).
+  final int jobTimeoutMs;
+
+  /// Limit for one status read.
+  final int statusTimeoutMs;
+
+  /// Read the status before sending and refuse to send on a known fault.
+  final bool checkStatusBefore;
+
+  /// Read the status after sending and report it.
+  final bool checkStatusAfter;
+
+  /// Also refuse to send when the status is unknown or timed out.
+  final bool refuseOnUnknownStatus;
+
+  /// Pause between the last write and the status read, in milliseconds.
+  final int postStatusDelayMs;
+
+  StrictPrintOptionsDTO({
+    required this.connectAttempts,
+    required this.connectBudgetMs,
+    required this.jobTimeoutMs,
+    required this.statusTimeoutMs,
+    required this.checkStatusBefore,
+    required this.checkStatusAfter,
+    required this.refuseOnUnknownStatus,
+    required this.postStatusDelayMs,
+  });
+}
+
+/// Honest ESC/POS status: the SDK code and the mapped outcome.
+class PrinterStatusDTO {
+  final PrinterOutcome outcome;
+
+  /// Numeric status of the Xprinter SDK 3.5.8 (`POSConst.STS_*`, negative
+  /// values are SDK errors); null when no status was obtained.
+  final int? statusCode;
+
+  /// Human readable text for logs.
+  final String message;
+  final int connectAttempts;
+  final int elapsedMs;
+
+  PrinterStatusDTO({
+    required this.outcome,
+    required this.statusCode,
+    required this.message,
+    required this.connectAttempts,
+    required this.elapsedMs,
+  });
+}
+
+/// Result of a strict print job or cash drawer pulse.
+class PrintJobResultDTO {
+  final PrinterOutcome outcome;
+
+  /// True when at least one byte was written to the printer. A job with
+  /// `sent == true` must not be resent automatically (double print).
+  final bool sent;
+  final PrintStage stage;
+
+  /// Status codes read before/after sending (null when not read).
+  final int? statusBefore;
+  final int? statusAfter;
+  final int bytesSent;
+  final int connectAttempts;
+  final int elapsedMs;
+  final String? message;
+
+  PrintJobResultDTO({
+    required this.outcome,
+    required this.sent,
+    required this.stage,
+    required this.statusBefore,
+    required this.statusAfter,
+    required this.bytesSent,
+    required this.connectAttempts,
+    required this.elapsedMs,
+    required this.message,
+  });
+}
+
 @HostApi()
 abstract class POSPrintersApi {
   /// Запрашивает разрешение на использование USB устройства у пользователя.
@@ -232,6 +367,50 @@ abstract class POSPrintersApi {
   @async
   @TaskQueue(type: TaskQueueType.serialBackgroundThread)
   TSPLStatusResult getTSPLPrinterStatus(PrinterConnectionParamsDTO printer);
+
+  // ---- Strict mode (opt-in). These run on their own coroutines, not on the
+  // serial task queues, so a dead printer never blocks other printers. Jobs for
+  // the same printer are serialised and the whole job is time-boxed.
+
+  /// ESC/POS status with the real SDK code and a mapped outcome.
+  @async
+  PrinterStatusDTO getPrinterStatusStrict(
+    PrinterConnectionParamsDTO printer,
+    StrictPrintOptionsDTO options,
+  );
+
+  /// Strict raw ESC/POS print: status check, bounded connect retries, no retry
+  /// after the first written byte, status read after sending.
+  @async
+  PrintJobResultDTO printDataStrict(
+    PrinterConnectionParamsDTO printer,
+    Uint8List data,
+    int width,
+    bool upsideDown,
+    StrictPrintOptionsDTO options,
+  );
+
+  /// Strict HTML receipt print (same guarantees as [printDataStrict]).
+  @async
+  PrintJobResultDTO printHTMLStrict(
+    PrinterConnectionParamsDTO printer,
+    String html,
+    int width,
+    bool upsideDown,
+    StrictPrintOptionsDTO options,
+  );
+
+  /// Strict cash drawer pulse: reports connection and write errors.
+  @async
+  PrintJobResultDTO openCashBoxStrict(
+    PrinterConnectionParamsDTO printer,
+    StrictPrintOptionsDTO options,
+  );
+
+  /// TCP scan limited to at most a /24 around each local address.
+  @async
+  @TaskQueue(type: TaskQueueType.serialBackgroundThread)
+  void startDiscoveryTCPNetworkPrintersStrict(int port);
 }
 
 /// API для получения событий обнаружения принтеров из нативного кода во Flutter.

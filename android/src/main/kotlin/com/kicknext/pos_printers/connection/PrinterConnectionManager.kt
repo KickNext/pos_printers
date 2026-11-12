@@ -258,7 +258,7 @@ class PrinterConnectionManager(private val usbManager: UsbManager) {
     /**
      * Creates or retrieves a connection for the given printer
      */
-    private fun createConnection(printer: PrinterConnectionParamsDTO): Pair<IDeviceConnection, String> {
+    internal fun createConnection(printer: PrinterConnectionParamsDTO): Pair<IDeviceConnection, String> {
         return when (printer.connectionType) {
             PosPrinterConnectionType.USB -> {
                 val usbParams = printer.usbParams 
@@ -353,6 +353,37 @@ class PrinterConnectionManager(private val usbManager: UsbManager) {
     }
     
     /**
+     * Connects with a hard time limit and without the legacy "reset connection" step
+     * (which creates a throw-away device and sleeps 500 ms). Used only by the strict mode.
+     * Throws [ConnectTimeoutException] when nothing answers within [timeoutMs].
+     */
+    internal fun connectBounded(connection: IDeviceConnection, target: String, timeoutMs: Long) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val failure = java.util.concurrent.atomic.AtomicReference<Exception?>(null)
+        val connected = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        connection.connect(target, net.posprinter.IConnectListener { code, _, message ->
+            if (code == POSConnect.CONNECT_SUCCESS) {
+                connected.set(true)
+            } else {
+                failure.compareAndSet(null, ConnectionException("Connection failed: $message (code: $code)"))
+            }
+            latch.countDown()
+        })
+
+        val finished = try {
+            latch.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw ConnectionException("Connection interrupted", e)
+        }
+        when {
+            !finished -> throw ConnectTimeoutException("Connection timeout after ${timeoutMs}ms")
+            !connected.get() -> throw failure.get() ?: ConnectionException("Connection failed")
+        }
+    }
+
+    /**
      * Connects to device with timeout handling
      */
     private fun connectWithTimeout(connection: IDeviceConnection, target: String) {
@@ -413,7 +444,10 @@ class UsbDeviceNotFoundException(
     val serialNumber: String?
 ) : Exception("USB device not found (VID=$vendorId, PID=$productId, SERIAL=${serialNumber ?: "null"})")
 
-class ConnectionException(message: String, cause: Throwable? = null) : Exception(message, cause)
+open class ConnectionException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/** The printer did not answer a connection attempt in time. */
+class ConnectTimeoutException(message: String) : ConnectionException(message)
 
 class UsbEndpointNotFoundException(
     val vendorId: Int,
