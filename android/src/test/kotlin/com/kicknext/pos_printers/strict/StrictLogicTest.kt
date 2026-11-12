@@ -107,7 +107,7 @@ internal class StrictLogicTest {
         val deadline = Deadline(5_000, 1_000) { now }
         assertEquals(5_000, deadline.remainingMs())
         assertEquals(2_000, deadline.cap(2_000))
-        now = 5_000
+        now = 4_000
         assertEquals(2_000, deadline.remainingMs())
         assertEquals(2_000, deadline.cap(9_000))
         assertFalse(deadline.expired())

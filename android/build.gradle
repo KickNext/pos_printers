@@ -55,6 +55,9 @@ android {
         implementation fileTree(include: ['*.jar'], dir: 'libs')
         implementation 'com.izettle:html2bitmap:1.9'
         testImplementation 'org.jetbrains.kotlin:kotlin-test'
+        testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
         testImplementation 'org.mockito:mockito-core:5.1.0'
     }
 
