@@ -1,3 +1,11 @@
+## 0.8.1
+
+### Changes
+
+- Android build follows Flutter 3.50: built-in Kotlin of AGP 9 (the plugin no longer applies `kotlin-android`; `kotlin { compilerOptions }` replaces `kotlinOptions`), AGP 9.3.1 and KGP 2.4.20 for the standalone build, Gradle wrapper 9.5.0, `compileSdk` 36.
+- Needs Flutter 3.44 or newer (`environment.flutter`). Plugin code and the Dart API are unchanged.
+- The example app builds again: AGP 9.3.1, Gradle 9.5.0, built-in Kotlin (its AGP 8.9.1 was below the floor of Flutter 3.47 and 3.50).
+
 ## 0.8.0
 
 ### Changes
