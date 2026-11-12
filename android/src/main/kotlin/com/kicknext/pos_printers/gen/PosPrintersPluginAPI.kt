@@ -60,6 +60,54 @@ enum class PosPrinterConnectionType(val raw: Int) {
   }
 }
 
+/**
+ * Mapped outcome of a printer status read or of a strict print job.
+ *
+ * For a job, [ready] means: the bytes were written to the printer and the
+ * status read afterwards shows no fault. It does NOT mean "paper came out":
+ * ESC/POS printers give no completion signal.
+ */
+enum class PrinterOutcome(val raw: Int) {
+  /** Printer answers and reports no fault (paper near end is still ready). */
+  READY(0),
+  /** Paper roll is empty. */
+  NO_PAPER(1),
+  /** Cover is open. */
+  COVER_OPEN(2),
+  /** Cannot connect, connection dropped, or the printer is paused/offline. */
+  OFFLINE(3),
+  /** Connecting, rendering, the status read or the whole job ran out of time. */
+  TIMEOUT(4),
+  /** Printer fault (cutter, overheat, generic error) or a write error. */
+  ERROR(5),
+  /** The printer did not give a usable status. */
+  UNKNOWN(6);
+
+  companion object {
+    fun ofRaw(raw: Int): PrinterOutcome? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+/** Where a strict job stopped. */
+enum class PrintStage(val raw: Int) {
+  /** The job ran to the end (see the outcome for the final printer state). */
+  COMPLETED(0),
+  VALIDATION(1),
+  RENDER(2),
+  CONNECT(3),
+  PRE_STATUS(4),
+  WRITE(5),
+  POST_STATUS(6);
+
+  companion object {
+    fun ofRaw(raw: Int): PrintStage? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class PrinterConnectionParamsDTO (
   val id: String,
@@ -285,6 +333,147 @@ data class UsbPermissionResult (
     )
   }
 }
+
+/**
+ * Limits of a strict job. Defaults are chosen by the Dart wrapper.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class StrictPrintOptionsDTO (
+  /** Connection attempts. Only connecting is retried, never a write. */
+  val connectAttempts: Long,
+  /** Total time for all connection attempts, in milliseconds. */
+  val connectBudgetMs: Long,
+  /** Hard limit for the whole job (render, connect, status, write). */
+  val jobTimeoutMs: Long,
+  /** Limit for one status read. */
+  val statusTimeoutMs: Long,
+  /** Read the status before sending and refuse to send on a known fault. */
+  val checkStatusBefore: Boolean,
+  /** Read the status after sending and report it. */
+  val checkStatusAfter: Boolean,
+  /** Also refuse to send when the status is unknown or timed out. */
+  val refuseOnUnknownStatus: Boolean,
+  /** Pause between the last write and the status read, in milliseconds. */
+  val postStatusDelayMs: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): StrictPrintOptionsDTO {
+      val connectAttempts = pigeonVar_list[0] as Long
+      val connectBudgetMs = pigeonVar_list[1] as Long
+      val jobTimeoutMs = pigeonVar_list[2] as Long
+      val statusTimeoutMs = pigeonVar_list[3] as Long
+      val checkStatusBefore = pigeonVar_list[4] as Boolean
+      val checkStatusAfter = pigeonVar_list[5] as Boolean
+      val refuseOnUnknownStatus = pigeonVar_list[6] as Boolean
+      val postStatusDelayMs = pigeonVar_list[7] as Long
+      return StrictPrintOptionsDTO(connectAttempts, connectBudgetMs, jobTimeoutMs, statusTimeoutMs, checkStatusBefore, checkStatusAfter, refuseOnUnknownStatus, postStatusDelayMs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      connectAttempts,
+      connectBudgetMs,
+      jobTimeoutMs,
+      statusTimeoutMs,
+      checkStatusBefore,
+      checkStatusAfter,
+      refuseOnUnknownStatus,
+      postStatusDelayMs,
+    )
+  }
+}
+
+/**
+ * Honest ESC/POS status: the SDK code and the mapped outcome.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PrinterStatusDTO (
+  val outcome: PrinterOutcome,
+  /**
+   * Numeric status of the Xprinter SDK 3.5.8 (`POSConst.STS_*`, negative
+   * values are SDK errors); null when no status was obtained.
+   */
+  val statusCode: Long? = null,
+  /** Human readable text for logs. */
+  val message: String,
+  val connectAttempts: Long,
+  val elapsedMs: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PrinterStatusDTO {
+      val outcome = pigeonVar_list[0] as PrinterOutcome
+      val statusCode = pigeonVar_list[1] as Long?
+      val message = pigeonVar_list[2] as String
+      val connectAttempts = pigeonVar_list[3] as Long
+      val elapsedMs = pigeonVar_list[4] as Long
+      return PrinterStatusDTO(outcome, statusCode, message, connectAttempts, elapsedMs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      outcome,
+      statusCode,
+      message,
+      connectAttempts,
+      elapsedMs,
+    )
+  }
+}
+
+/**
+ * Result of a strict print job or cash drawer pulse.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PrintJobResultDTO (
+  val outcome: PrinterOutcome,
+  /**
+   * True when at least one byte was written to the printer. A job with
+   * `sent == true` must not be resent automatically (double print).
+   */
+  val sent: Boolean,
+  val stage: PrintStage,
+  /** Status codes read before/after sending (null when not read). */
+  val statusBefore: Long? = null,
+  val statusAfter: Long? = null,
+  val bytesSent: Long,
+  val connectAttempts: Long,
+  val elapsedMs: Long,
+  val message: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PrintJobResultDTO {
+      val outcome = pigeonVar_list[0] as PrinterOutcome
+      val sent = pigeonVar_list[1] as Boolean
+      val stage = pigeonVar_list[2] as PrintStage
+      val statusBefore = pigeonVar_list[3] as Long?
+      val statusAfter = pigeonVar_list[4] as Long?
+      val bytesSent = pigeonVar_list[5] as Long
+      val connectAttempts = pigeonVar_list[6] as Long
+      val elapsedMs = pigeonVar_list[7] as Long
+      val message = pigeonVar_list[8] as String?
+      return PrintJobResultDTO(outcome, sent, stage, statusBefore, statusAfter, bytesSent, connectAttempts, elapsedMs, message)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      outcome,
+      sent,
+      stage,
+      statusBefore,
+      statusAfter,
+      bytesSent,
+      connectAttempts,
+      elapsedMs,
+      message,
+    )
+  }
+}
 private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -294,43 +483,68 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         }
       }
       130.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          PrinterConnectionParamsDTO.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          PrinterOutcome.ofRaw(it.toInt())
         }
       }
       131.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          UsbParams.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          PrintStage.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NetworkParams.fromList(it)
+          PrinterConnectionParamsDTO.fromList(it)
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ZPLStatusResult.fromList(it)
+          UsbParams.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          TSPLStatusResult.fromList(it)
+          NetworkParams.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          StatusResult.fromList(it)
+          ZPLStatusResult.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          StringResult.fromList(it)
+          TSPLStatusResult.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          StatusResult.fromList(it)
+        }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          StringResult.fromList(it)
+        }
+      }
+      139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           UsbPermissionResult.fromList(it)
+        }
+      }
+      140.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          StrictPrintOptionsDTO.fromList(it)
+        }
+      }
+      141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PrinterStatusDTO.fromList(it)
+        }
+      }
+      142.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          PrintJobResultDTO.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -342,36 +556,56 @@ private open class PosPrintersPluginAPIPigeonCodec : StandardMessageCodec() {
         stream.write(129)
         writeValue(stream, value.raw)
       }
-      is PrinterConnectionParamsDTO -> {
+      is PrinterOutcome -> {
         stream.write(130)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw)
       }
-      is UsbParams -> {
+      is PrintStage -> {
         stream.write(131)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw)
       }
-      is NetworkParams -> {
+      is PrinterConnectionParamsDTO -> {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is ZPLStatusResult -> {
+      is UsbParams -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is TSPLStatusResult -> {
+      is NetworkParams -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is StatusResult -> {
+      is ZPLStatusResult -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is StringResult -> {
+      is TSPLStatusResult -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is UsbPermissionResult -> {
+      is StatusResult -> {
         stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is StringResult -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is UsbPermissionResult -> {
+        stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is StrictPrintOptionsDTO -> {
+        stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is PrinterStatusDTO -> {
+        stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is PrintJobResultDTO -> {
+        stream.write(142)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -415,6 +649,19 @@ interface POSPrintersApi {
   fun printTsplRawData(printer: PrinterConnectionParamsDTO, labelCommands: ByteArray, width: Long, callback: (Result<Unit>) -> Unit)
   fun printTsplHtml(printer: PrinterConnectionParamsDTO, html: String, width: Long, callback: (Result<Unit>) -> Unit)
   fun getTSPLPrinterStatus(printer: PrinterConnectionParamsDTO, callback: (Result<TSPLStatusResult>) -> Unit)
+  /** ESC/POS status with the real SDK code and a mapped outcome. */
+  fun getPrinterStatusStrict(printer: PrinterConnectionParamsDTO, options: StrictPrintOptionsDTO, callback: (Result<PrinterStatusDTO>) -> Unit)
+  /**
+   * Strict raw ESC/POS print: status check, bounded connect retries, no retry
+   * after the first written byte, status read after sending.
+   */
+  fun printDataStrict(printer: PrinterConnectionParamsDTO, data: ByteArray, width: Long, upsideDown: Boolean, options: StrictPrintOptionsDTO, callback: (Result<PrintJobResultDTO>) -> Unit)
+  /** Strict HTML receipt print (same guarantees as [printDataStrict]). */
+  fun printHTMLStrict(printer: PrinterConnectionParamsDTO, html: String, width: Long, upsideDown: Boolean, options: StrictPrintOptionsDTO, callback: (Result<PrintJobResultDTO>) -> Unit)
+  /** Strict cash drawer pulse: reports connection and write errors. */
+  fun openCashBoxStrict(printer: PrinterConnectionParamsDTO, options: StrictPrintOptionsDTO, callback: (Result<PrintJobResultDTO>) -> Unit)
+  /** TCP scan limited to at most a /24 around each local address. */
+  fun startDiscoveryTCPNetworkPrintersStrict(port: Long, callback: (Result<Unit>) -> Unit)
 
   companion object {
     /** The codec used by POSPrintersApi. */
@@ -838,6 +1085,116 @@ interface POSPrintersApi {
               } else {
                 val data = result.getOrNull()
                 reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterStatusStrict$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val optionsArg = args[1] as StrictPrintOptionsDTO
+            api.getPrinterStatusStrict(printerArg, optionsArg) { result: Result<PrinterStatusDTO> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.printDataStrict$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val dataArg = args[1] as ByteArray
+            val widthArg = args[2] as Long
+            val upsideDownArg = args[3] as Boolean
+            val optionsArg = args[4] as StrictPrintOptionsDTO
+            api.printDataStrict(printerArg, dataArg, widthArg, upsideDownArg, optionsArg) { result: Result<PrintJobResultDTO> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.printHTMLStrict$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val htmlArg = args[1] as String
+            val widthArg = args[2] as Long
+            val upsideDownArg = args[3] as Boolean
+            val optionsArg = args[4] as StrictPrintOptionsDTO
+            api.printHTMLStrict(printerArg, htmlArg, widthArg, upsideDownArg, optionsArg) { result: Result<PrintJobResultDTO> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.openCashBoxStrict$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val printerArg = args[0] as PrinterConnectionParamsDTO
+            val optionsArg = args[1] as StrictPrintOptionsDTO
+            api.openCashBoxStrict(printerArg, optionsArg) { result: Result<PrintJobResultDTO> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val taskQueue = binaryMessenger.makeBackgroundTaskQueue()
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryTCPNetworkPrintersStrict$separatedMessageChannelSuffix", codec, taskQueue)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val portArg = args[0] as Long
+            api.startDiscoveryTCPNetworkPrintersStrict(portArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(wrapError(error))
+              } else {
+                reply.reply(wrapResult(null))
               }
             }
           }
