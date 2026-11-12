@@ -1,3 +1,15 @@
+## 0.8.2
+
+### Changes
+
+- Opt-in strict printing (`PrintOptions.strict()`); without it every method behaves exactly as before.
+- `printEscHTMLWithOutcome`, `printEscRawDataWithOutcome`, `openCashBoxWithOutcome` and `getPrinterStatusStrict` return a `PrintOutcomeResult`: `outcome` (`ready`, `noPaper`, `coverOpen`, `offline`, `timeout`, `error`, `unknown`), whether bytes were sent, the stage, the printer status before and after, bytes sent, connect attempts and elapsed time.
+- Strict mode reads the real SDK 3.5.8 status (`STS_PAPEREMPTY` = 1, `STS_COVEROPEN` = 16, `STS_PRINTER_ERR` = 64, `CONNECT_ERROR` = -3, `READ_TIMEOUT` = -4) with its own timeout, refuses a printer that already reports a fault, retries only the connection (3 attempts within 10 s by default) and never after a byte was written, and reports write errors.
+- `ready` after a job means the bytes were written and the printer reported no fault; the SDK gives no paper-out signal for a finished job.
+- Strict jobs run outside the per-method serial queues with a lock per printer: a dead printer no longer holds the jobs of other printers.
+- `findPrinters(limitTcpScanTo24: true)` scans at most a /24 around each local address.
+- ZPL and TSPL labels have no strict mode (the status commands are ESC/POS).
+
 ## 0.8.1
 
 ### Changes
