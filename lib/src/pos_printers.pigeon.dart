@@ -31,6 +31,46 @@ enum PosPrinterConnectionType {
   network,
 }
 
+/// Mapped outcome of a printer status read or of a strict print job.
+///
+/// For a job, [ready] means: the bytes were written to the printer and the
+/// status read afterwards shows no fault. It does NOT mean "paper came out":
+/// ESC/POS printers give no completion signal.
+enum PrinterOutcome {
+  /// Printer answers and reports no fault (paper near end is still ready).
+  ready,
+
+  /// Paper roll is empty.
+  noPaper,
+
+  /// Cover is open.
+  coverOpen,
+
+  /// Cannot connect, connection dropped, or the printer is paused/offline.
+  offline,
+
+  /// Connecting, rendering, the status read or the whole job ran out of time.
+  timeout,
+
+  /// Printer fault (cutter, overheat, generic error) or a write error.
+  error,
+
+  /// The printer did not give a usable status.
+  unknown,
+}
+
+/// Where a strict job stopped.
+enum PrintStage {
+  /// The job ran to the end (see the outcome for the final printer state).
+  completed,
+  validation,
+  render,
+  connect,
+  preStatus,
+  write,
+  postStatus,
+}
+
 class PrinterConnectionParamsDTO {
   PrinterConnectionParamsDTO({
     required this.id,
@@ -316,6 +356,181 @@ class UsbPermissionResult {
   }
 }
 
+/// Limits of a strict job. Defaults are chosen by the Dart wrapper.
+class StrictPrintOptionsDTO {
+  StrictPrintOptionsDTO({
+    required this.connectAttempts,
+    required this.connectBudgetMs,
+    required this.jobTimeoutMs,
+    required this.statusTimeoutMs,
+    required this.checkStatusBefore,
+    required this.checkStatusAfter,
+    required this.refuseOnUnknownStatus,
+    required this.postStatusDelayMs,
+  });
+
+  /// Connection attempts. Only connecting is retried, never a write.
+  int connectAttempts;
+
+  /// Total time for all connection attempts, in milliseconds.
+  int connectBudgetMs;
+
+  /// Hard limit for the whole job (render, connect, status, write).
+  int jobTimeoutMs;
+
+  /// Limit for one status read.
+  int statusTimeoutMs;
+
+  /// Read the status before sending and refuse to send on a known fault.
+  bool checkStatusBefore;
+
+  /// Read the status after sending and report it.
+  bool checkStatusAfter;
+
+  /// Also refuse to send when the status is unknown or timed out.
+  bool refuseOnUnknownStatus;
+
+  /// Pause between the last write and the status read, in milliseconds.
+  int postStatusDelayMs;
+
+  Object encode() {
+    return <Object?>[
+      connectAttempts,
+      connectBudgetMs,
+      jobTimeoutMs,
+      statusTimeoutMs,
+      checkStatusBefore,
+      checkStatusAfter,
+      refuseOnUnknownStatus,
+      postStatusDelayMs,
+    ];
+  }
+
+  static StrictPrintOptionsDTO decode(Object result) {
+    result as List<Object?>;
+    return StrictPrintOptionsDTO(
+      connectAttempts: result[0]! as int,
+      connectBudgetMs: result[1]! as int,
+      jobTimeoutMs: result[2]! as int,
+      statusTimeoutMs: result[3]! as int,
+      checkStatusBefore: result[4]! as bool,
+      checkStatusAfter: result[5]! as bool,
+      refuseOnUnknownStatus: result[6]! as bool,
+      postStatusDelayMs: result[7]! as int,
+    );
+  }
+}
+
+/// Honest ESC/POS status: the SDK code and the mapped outcome.
+class PrinterStatusDTO {
+  PrinterStatusDTO({
+    required this.outcome,
+    this.statusCode,
+    required this.message,
+    required this.connectAttempts,
+    required this.elapsedMs,
+  });
+
+  PrinterOutcome outcome;
+
+  /// Numeric status of the Xprinter SDK 3.5.8 (`POSConst.STS_*`, negative
+  /// values are SDK errors); null when no status was obtained.
+  int? statusCode;
+
+  /// Human readable text for logs.
+  String message;
+
+  int connectAttempts;
+
+  int elapsedMs;
+
+  Object encode() {
+    return <Object?>[
+      outcome,
+      statusCode,
+      message,
+      connectAttempts,
+      elapsedMs,
+    ];
+  }
+
+  static PrinterStatusDTO decode(Object result) {
+    result as List<Object?>;
+    return PrinterStatusDTO(
+      outcome: result[0]! as PrinterOutcome,
+      statusCode: result[1] as int?,
+      message: result[2]! as String,
+      connectAttempts: result[3]! as int,
+      elapsedMs: result[4]! as int,
+    );
+  }
+}
+
+/// Result of a strict print job or cash drawer pulse.
+class PrintJobResultDTO {
+  PrintJobResultDTO({
+    required this.outcome,
+    required this.sent,
+    required this.stage,
+    this.statusBefore,
+    this.statusAfter,
+    required this.bytesSent,
+    required this.connectAttempts,
+    required this.elapsedMs,
+    this.message,
+  });
+
+  PrinterOutcome outcome;
+
+  /// True when at least one byte was written to the printer. A job with
+  /// `sent == true` must not be resent automatically (double print).
+  bool sent;
+
+  PrintStage stage;
+
+  /// Status codes read before/after sending (null when not read).
+  int? statusBefore;
+
+  int? statusAfter;
+
+  int bytesSent;
+
+  int connectAttempts;
+
+  int elapsedMs;
+
+  String? message;
+
+  Object encode() {
+    return <Object?>[
+      outcome,
+      sent,
+      stage,
+      statusBefore,
+      statusAfter,
+      bytesSent,
+      connectAttempts,
+      elapsedMs,
+      message,
+    ];
+  }
+
+  static PrintJobResultDTO decode(Object result) {
+    result as List<Object?>;
+    return PrintJobResultDTO(
+      outcome: result[0]! as PrinterOutcome,
+      sent: result[1]! as bool,
+      stage: result[2]! as PrintStage,
+      statusBefore: result[3] as int?,
+      statusAfter: result[4] as int?,
+      bytesSent: result[5]! as int,
+      connectAttempts: result[6]! as int,
+      elapsedMs: result[7]! as int,
+      message: result[8] as String?,
+    );
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -326,29 +541,44 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is PosPrinterConnectionType) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is PrinterConnectionParamsDTO) {
+    } else if (value is PrinterOutcome) {
       buffer.putUint8(130);
-      writeValue(buffer, value.encode());
-    } else if (value is UsbParams) {
+      writeValue(buffer, value.index);
+    } else if (value is PrintStage) {
       buffer.putUint8(131);
-      writeValue(buffer, value.encode());
-    } else if (value is NetworkParams) {
+      writeValue(buffer, value.index);
+    } else if (value is PrinterConnectionParamsDTO) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is ZPLStatusResult) {
+    } else if (value is UsbParams) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is TSPLStatusResult) {
+    } else if (value is NetworkParams) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is StatusResult) {
+    } else if (value is ZPLStatusResult) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is StringResult) {
+    } else if (value is TSPLStatusResult) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is UsbPermissionResult) {
+    } else if (value is StatusResult) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    } else if (value is StringResult) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    } else if (value is UsbPermissionResult) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    } else if (value is StrictPrintOptionsDTO) {
+      buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    } else if (value is PrinterStatusDTO) {
+      buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    } else if (value is PrintJobResultDTO) {
+      buffer.putUint8(142);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -362,21 +592,33 @@ class _PigeonCodec extends StandardMessageCodec {
         final int? value = readValue(buffer) as int?;
         return value == null ? null : PosPrinterConnectionType.values[value];
       case 130:
-        return PrinterConnectionParamsDTO.decode(readValue(buffer)!);
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : PrinterOutcome.values[value];
       case 131:
-        return UsbParams.decode(readValue(buffer)!);
+        final int? value = readValue(buffer) as int?;
+        return value == null ? null : PrintStage.values[value];
       case 132:
-        return NetworkParams.decode(readValue(buffer)!);
+        return PrinterConnectionParamsDTO.decode(readValue(buffer)!);
       case 133:
-        return ZPLStatusResult.decode(readValue(buffer)!);
+        return UsbParams.decode(readValue(buffer)!);
       case 134:
-        return TSPLStatusResult.decode(readValue(buffer)!);
+        return NetworkParams.decode(readValue(buffer)!);
       case 135:
-        return StatusResult.decode(readValue(buffer)!);
+        return ZPLStatusResult.decode(readValue(buffer)!);
       case 136:
-        return StringResult.decode(readValue(buffer)!);
+        return TSPLStatusResult.decode(readValue(buffer)!);
       case 137:
+        return StatusResult.decode(readValue(buffer)!);
+      case 138:
+        return StringResult.decode(readValue(buffer)!);
+      case 139:
         return UsbPermissionResult.decode(readValue(buffer)!);
+      case 140:
+        return StrictPrintOptionsDTO.decode(readValue(buffer)!);
+      case 141:
+        return PrinterStatusDTO.decode(readValue(buffer)!);
+      case 142:
+        return PrintJobResultDTO.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -929,6 +1171,166 @@ class POSPrintersApi {
       );
     } else {
       return (pigeonVar_replyList[0] as TSPLStatusResult?)!;
+    }
+  }
+
+  /// ESC/POS status with the real SDK code and a mapped outcome.
+  Future<PrinterStatusDTO> getPrinterStatusStrict(
+      PrinterConnectionParamsDTO printer, StrictPrintOptionsDTO options) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.getPrinterStatusStrict$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, options]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PrinterStatusDTO?)!;
+    }
+  }
+
+  /// Strict raw ESC/POS print: status check, bounded connect retries, no retry
+  /// after the first written byte, status read after sending.
+  Future<PrintJobResultDTO> printDataStrict(
+      PrinterConnectionParamsDTO printer,
+      Uint8List data,
+      int width,
+      bool upsideDown,
+      StrictPrintOptionsDTO options) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printDataStrict$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+            .send(<Object?>[printer, data, width, upsideDown, options])
+        as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PrintJobResultDTO?)!;
+    }
+  }
+
+  /// Strict HTML receipt print (same guarantees as [printDataStrict]).
+  Future<PrintJobResultDTO> printHTMLStrict(
+      PrinterConnectionParamsDTO printer,
+      String html,
+      int width,
+      bool upsideDown,
+      StrictPrintOptionsDTO options) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.printHTMLStrict$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+            .send(<Object?>[printer, html, width, upsideDown, options])
+        as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PrintJobResultDTO?)!;
+    }
+  }
+
+  /// Strict cash drawer pulse: reports connection and write errors.
+  Future<PrintJobResultDTO> openCashBoxStrict(
+      PrinterConnectionParamsDTO printer, StrictPrintOptionsDTO options) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.openCashBoxStrict$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList = await pigeonVar_channel
+        .send(<Object?>[printer, options]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else if (pigeonVar_replyList[0] == null) {
+      throw PlatformException(
+        code: 'null-error',
+        message: 'Host platform returned null value for non-null return value.',
+      );
+    } else {
+      return (pigeonVar_replyList[0] as PrintJobResultDTO?)!;
+    }
+  }
+
+  /// TCP scan limited to at most a /24 around each local address.
+  Future<void> startDiscoveryTCPNetworkPrintersStrict(int port) async {
+    final String pigeonVar_channelName =
+        'dev.flutter.pigeon.pos_printers.POSPrintersApi.startDiscoveryTCPNetworkPrintersStrict$pigeonVar_messageChannelSuffix';
+    final BasicMessageChannel<Object?> pigeonVar_channel =
+        BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final List<Object?>? pigeonVar_replyList =
+        await pigeonVar_channel.send(<Object?>[port]) as List<Object?>?;
+    if (pigeonVar_replyList == null) {
+      throw _createConnectionError(pigeonVar_channelName);
+    } else if (pigeonVar_replyList.length > 1) {
+      throw PlatformException(
+        code: pigeonVar_replyList[0]! as String,
+        message: pigeonVar_replyList[1] as String?,
+        details: pigeonVar_replyList[2],
+      );
+    } else {
+      return;
     }
   }
 }

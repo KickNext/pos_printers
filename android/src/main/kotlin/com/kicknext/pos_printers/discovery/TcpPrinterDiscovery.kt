@@ -5,6 +5,7 @@ import com.kicknext.pos_printers.Utils
 import com.kicknext.pos_printers.gen.NetworkParams
 import com.kicknext.pos_printers.gen.PosPrinterConnectionType
 import com.kicknext.pos_printers.gen.PrinterConnectionParamsDTO
+import com.kicknext.pos_printers.strict.Subnet
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Semaphore
 import java.net.Inet4Address
@@ -12,7 +13,9 @@ import java.net.NetworkInterface
 
 class TcpPrinterDiscovery(
     private val excludeIpSet: Set<String> = emptySet(),
-    private val maxConcurrency: Int = 100
+    private val maxConcurrency: Int = 100,
+    /** Strict mode: scan at most a /24 around each local address. */
+    private val limitTo24: Boolean = false
 ) {
 
     fun discover(
@@ -26,7 +29,11 @@ class TcpPrinterDiscovery(
             val semaphore = Semaphore(maxConcurrency)
             val jobs = mutableListOf<Job>()
             for (network in localNetworks) {
-                val range = Utils.getIpRangeFromCidr(network.ipAddress, network.prefixLength) ?: continue
+                val range: Iterable<String> = if (limitTo24) {
+                    Subnet.hosts(network.ipAddress, network.prefixLength.toInt(), true)
+                } else {
+                    Utils.getIpRangeFromCidr(network.ipAddress, network.prefixLength)?.asIterable() ?: continue
+                }
                 for (ip in range) {
                     if (ip == network.ipAddress || excludeIpSet.contains(ip)) continue
 

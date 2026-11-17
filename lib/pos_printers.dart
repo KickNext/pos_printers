@@ -4,3 +4,4 @@ export 'src/enums/paper_size.dart';
 export 'src/filter.dart';
 export 'src/pos_printers.dart';
 export 'src/pos_printers.pigeon.dart';
+export 'src/strict_print.dart';
