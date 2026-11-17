@@ -128,6 +128,53 @@ class Deadline(
     fun cap(stepMs: Long): Long = minOf(stepMs, remainingMs())
 }
 
+/** How one chunk went through a transfer that may move fewer bytes than asked. */
+sealed class ChunkWrite {
+    abstract val written: Int
+
+    /** Every byte of the chunk was moved. */
+    data class Done(override val written: Int) : ChunkWrite()
+
+    /** The job deadline passed before the chunk was fully moved. */
+    data class Expired(override val written: Int) : ChunkWrite()
+
+    /** A transfer moved nothing: the printer stopped taking data. */
+    data class Stalled(override val written: Int) : ChunkWrite()
+
+    /** A transfer reported an error ([code] < 0). */
+    data class Failed(override val written: Int, val code: Int) : ChunkWrite()
+}
+
+/**
+ * Writes [size] bytes through [transfer], which gets (offset, length, timeoutMs) and returns how many
+ * bytes it moved, or a negative code on error. A short transfer is continued from where it stopped;
+ * a transfer that moves nothing or fails ends the chunk. The deadline is checked before every
+ * transfer, so an expired job writes nothing more, and every transfer is time-limited by what is left
+ * of the job (never 0, which means "no limit" to Android's bulkTransfer). [maxStepBytes] bounds one
+ * transfer: before Android 9 a bulk transfer silently moves at most 16384 bytes.
+ */
+fun writeFully(
+    size: Int,
+    deadline: Deadline,
+    maxStepMs: Long,
+    maxStepBytes: Int,
+    transfer: (offset: Int, length: Int, timeoutMs: Int) -> Int,
+): ChunkWrite {
+    var offset = 0
+    while (offset < size) {
+        val timeoutMs = deadline.cap(maxStepMs)
+        if (timeoutMs <= 0) return ChunkWrite.Expired(offset)
+        val length = minOf(size - offset, maxStepBytes)
+        val moved = transfer(offset, length, timeoutMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+        when {
+            moved < 0 -> return if (deadline.expired()) ChunkWrite.Expired(offset) else ChunkWrite.Failed(offset, moved)
+            moved == 0 -> return if (deadline.expired()) ChunkWrite.Expired(offset) else ChunkWrite.Stalled(offset)
+            else -> offset += minOf(moved, length)
+        }
+    }
+    return ChunkWrite.Done(offset)
+}
+
 /** IPv4 helpers for the strict TCP scan. */
 object Subnet {
     /**

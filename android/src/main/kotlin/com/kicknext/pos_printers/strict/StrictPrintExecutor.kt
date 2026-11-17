@@ -7,6 +7,7 @@ import com.kicknext.pos_printers.gen.*
 import com.kicknext.pos_printers.printer.PrinterOperations
 import kotlinx.coroutines.*
 import net.posprinter.IDeviceConnection
+import net.posprinter.POSConnect
 import net.posprinter.POSConst
 import net.posprinter.POSPrinter
 import java.util.concurrent.ConcurrentHashMap
@@ -20,7 +21,8 @@ import java.util.concurrent.TimeUnit
  *  - the whole job is time-boxed (StrictPrintOptionsDTO.jobTimeoutMs);
  *  - only connecting is retried, with a small total budget; after the first written byte there is no retry;
  *  - the status is read before sending (a known fault refuses the job) and after sending;
- *  - bytes are written synchronously (sendSync), so a write error is reported, not swallowed;
+ *  - bytes are written synchronously (sendSync on the network, bulk transfers with the real count on
+ *    USB), so a write error or a short write is reported, not swallowed;
  *  - jobs for one printer run one after another; other printers are never blocked.
  *
  * ESC/POS has no "printing finished" signal. PrinterOutcome.READY after a job means the bytes were
@@ -35,6 +37,9 @@ class StrictPrintExecutor(
         private const val TAG = "StrictPrintExecutor"
         private const val DRAWER_PULSES = 3
         private const val DRAWER_PULSE_GAP_MS = 100L
+
+        /** Longest single USB transfer; the job deadline cuts it shorter. */
+        private const val USB_STEP_TIMEOUT_MS = 5_000L
     }
 
     private val printerLocks = ConcurrentHashMap<String, Semaphore>()
@@ -361,13 +366,23 @@ class StrictPrintExecutor(
     private class FlushResult(val bytes: Int, val outcome: PrinterOutcome?, val message: String?)
 
     /**
-     * Writes the collected chunks with sendSync. A watchdog closes the connection when the job deadline
-     * passes, which unblocks a write stuck on a stalled printer.
+     * Writes the collected chunks. The deadline is checked before every chunk, so an expired job writes
+     * nothing more. USB goes straight to the bulk OUT endpoint the SDK opened ([UsbBulkOut]): the SDK's
+     * sendSync reports a short USB transfer as a full write. The network path uses sendSync, which
+     * writes to a socket stream (all bytes or an exception). A watchdog closes the connection when the
+     * deadline passes, which unblocks a write stuck on a stalled printer.
      */
     private suspend fun flush(connection: IDeviceConnection, chunks: List<ByteArray>, deadline: Deadline): FlushResult {
         var written = 0
         val timedOut = java.util.concurrent.atomic.AtomicBoolean(false)
         var failure: FlushResult? = null
+        val usb = if (connection.connectType == POSConnect.DEVICE_TYPE_USB) {
+            UsbBulkOut.of(connection).also {
+                if (it == null) Log.w(TAG, "USB bulk OUT not reachable: the transfer count cannot be checked")
+            }
+        } else {
+            null
+        }
         coroutineScope {
             val watchdog = launch(Dispatchers.Default) {
                 delay(deadline.remainingMs())
@@ -376,6 +391,36 @@ class StrictPrintExecutor(
             }
             withContext(Dispatchers.IO) {
                 for (chunk in chunks) {
+                    if (deadline.expired()) {
+                        timedOut.set(true)
+                        break
+                    }
+                    if (usb != null) {
+                        val result = try {
+                            writeFully(chunk.size, deadline, USB_STEP_TIMEOUT_MS, UsbBulkOut.MAX_TRANSFER_BYTES) { offset, length, timeoutMs ->
+                                usb.transfer(chunk, offset, length, timeoutMs)
+                            }
+                        } catch (e: Exception) {
+                            failure = FlushResult(written, PrinterOutcome.ERROR, e.message)
+                            break
+                        }
+                        written += result.written
+                        when (result) {
+                            is ChunkWrite.Done -> continue
+                            is ChunkWrite.Expired -> timedOut.set(true)
+                            is ChunkWrite.Stalled -> failure = FlushResult(
+                                written,
+                                PrinterOutcome.OFFLINE,
+                                "USB transfer moved ${result.written} of ${chunk.size} bytes and then nothing",
+                            )
+                            is ChunkWrite.Failed -> failure = FlushResult(
+                                written,
+                                PrinterOutcome.OFFLINE,
+                                "USB transfer failed (${result.code}) after ${result.written} of ${chunk.size} bytes",
+                            )
+                        }
+                        break
+                    }
                     val sent = try {
                         connection.sendSync(chunk)
                     } catch (e: Exception) {
